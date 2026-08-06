@@ -267,9 +267,11 @@ final class HTP_Submissions_Page
         if ($pages <= 1) {
             return;
         }
+        $base = add_query_arg('paged', 999999999);
+        $base = str_replace('999999999', '%#%', $base);
         echo '<div class="tablenav"><div class="tablenav-pages">';
         echo wp_kses_post(paginate_links([
-            'base' => add_query_arg('paged', '%#%'),
+            'base' => $base,
             'format' => '',
             'current' => $page,
             'total' => $pages,

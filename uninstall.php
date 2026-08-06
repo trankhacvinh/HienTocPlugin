@@ -4,7 +4,6 @@ defined('WP_UNINSTALL_PLUGIN') || exit;
 
 global $wpdb;
 
-// Xóa ảnh do plugin tiếp nhận từ form public.
 $attachment_ids = get_posts([
     'post_type' => 'attachment',
     'post_status' => 'any',
@@ -17,7 +16,6 @@ foreach ($attachment_ids as $attachment_id) {
     wp_delete_attachment((int) $attachment_id, true);
 }
 
-// Chỉ xóa các trang do plugin tự tạo; trang người dùng tự tạo/gắn vào salon được giữ lại.
 $created_page_ids = get_posts([
     'post_type' => 'page',
     'post_status' => 'any',
@@ -29,7 +27,6 @@ foreach ($created_page_ids as $page_id) {
     wp_delete_post((int) $page_id, true);
 }
 
-// Gỡ metadata khỏi các trang WordPress do người dùng tự tạo.
 $wpdb->delete($wpdb->postmeta, ['meta_key' => '_htp_salon_id']);
 
 $tables = [
@@ -52,6 +49,7 @@ foreach ($tables as $table) {
 
 $options = [
     'htp_db_version',
+    'htp_legacy_migrated_v2',
     'htp_registration_page_id',
     'htp_lookup_page_id',
     'htp_oa_url',

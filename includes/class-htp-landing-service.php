@@ -38,12 +38,8 @@ final class HTP_Landing_Service
 
     public function attach_page(int $salon_id, int $page_id): void
     {
-        $page = get_post($page_id);
-        if (!$page || $page->post_type !== 'page') {
-            throw new InvalidArgumentException('Trang landing không hợp lệ.');
-        }
-
         global $wpdb;
+
         $old_pages = $wpdb->get_col($wpdb->prepare(
             "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_htp_salon_id' AND meta_value = %d",
             $salon_id
@@ -54,6 +50,22 @@ final class HTP_Landing_Service
             }
         }
 
+        if (!$page_id) {
+            (new HTP_Salon_Repository())->set_landing_page($salon_id, 0);
+            return;
+        }
+
+        $page = get_post($page_id);
+        if (!$page || $page->post_type !== 'page') {
+            throw new InvalidArgumentException('Trang landing không hợp lệ.');
+        }
+
+        $wpdb->update(
+            $wpdb->prefix . 'htp_salons',
+            ['landing_page_id' => null, 'updated_at' => current_time('mysql')],
+            ['landing_page_id' => $page_id]
+        );
+        delete_post_meta($page_id, '_htp_salon_id');
         update_post_meta($page_id, '_htp_salon_id', $salon_id);
         (new HTP_Salon_Repository())->set_landing_page($salon_id, $page_id);
     }
@@ -62,6 +74,9 @@ final class HTP_Landing_Service
     {
         $repository = new HTP_Salon_Repository();
         $code = isset($atts['salon']) ? sanitize_text_field((string) $atts['salon']) : '';
+        if ($code === '' && isset($_GET['salon'])) {
+            $code = sanitize_text_field(wp_unslash($_GET['salon']));
+        }
         if ($code !== '') {
             return $repository->find_active_by_code($code);
         }

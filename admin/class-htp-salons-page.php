@@ -136,9 +136,7 @@ final class HTP_Salons_Page
                 $message = 'created';
             }
             $page_id = absint($data['landing_page_id'] ?? 0);
-            if ($page_id) {
-                (new HTP_Landing_Service())->attach_page($id, $page_id);
-            }
+            (new HTP_Landing_Service())->attach_page($id, $page_id);
             HTP_Activity_Logger::log('salon_saved', 'salon', $id);
         } catch (Throwable $exception) {
             wp_die(esc_html($exception->getMessage()));
