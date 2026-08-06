@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Hiến Tóc Plugin
- * Description: Quản lý salon, QR và đăng ký hiến tóc theo salon.
- * Version: 1.0.0
+ * Description: Quản lý landing salon, đăng ký hiến tóc và đăng ký thành viên.
+ * Version: 2.0.0
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: HienTocPlugin
@@ -11,8 +11,8 @@
 
 defined('ABSPATH') || exit;
 
-define('HTP_VERSION', '1.0.0');
-define('HTP_DB_VERSION', '1.0.0');
+define('HTP_VERSION', '2.0.0');
+define('HTP_DB_VERSION', '2.0.0');
 define('HTP_FILE', __FILE__);
 define('HTP_PATH', plugin_dir_path(__FILE__));
 define('HTP_URL', plugin_dir_url(__FILE__));
@@ -22,13 +22,18 @@ $htp_files = [
     'includes/class-htp-activity-logger.php',
     'includes/class-htp-user-salon-service.php',
     'includes/class-htp-salon-repository.php',
-    'includes/class-htp-registration-repository.php',
-    'includes/class-htp-registration-service.php',
+    'includes/class-htp-form-repository.php',
+    'includes/class-htp-submission-repository.php',
+    'includes/class-htp-upload-service.php',
+    'includes/class-htp-submission-service.php',
+    'includes/class-htp-landing-service.php',
     'includes/class-htp-qr-service.php',
+    'includes/class-htp-xlsx-exporter.php',
     'public/class-htp-shortcodes.php',
     'admin/class-htp-admin.php',
     'admin/class-htp-salons-page.php',
-    'admin/class-htp-registrations-page.php',
+    'admin/class-htp-forms-page.php',
+    'admin/class-htp-submissions-page.php',
     'admin/class-htp-users-page.php',
     'admin/class-htp-reports-page.php',
     'admin/class-htp-activity-page.php',
@@ -51,7 +56,8 @@ add_action('plugins_loaded', static function (): void {
     if (is_admin()) {
         HTP_Admin::init();
         HTP_Salons_Page::init();
-        HTP_Registrations_Page::init();
+        HTP_Forms_Page::init();
+        HTP_Submissions_Page::init();
         HTP_Users_Page::init();
         HTP_Reports_Page::init();
         HTP_Activity_Page::init();
@@ -69,10 +75,25 @@ add_action('wp_enqueue_scripts', static function (): void {
         return;
     }
 
-    $shortcodes = ['htp_registration_form', 'htp_salon_info', 'htp_registration_lookup', 'htp_salon_list', 'htp_statistics'];
+    $shortcodes = [
+        'htp_salon_landing',
+        'htp_donation_form',
+        'htp_member_form',
+        'htp_registration_form',
+        'htp_registration_lookup',
+        'htp_salon_list',
+        'htp_statistics',
+    ];
+
     foreach ($shortcodes as $shortcode) {
         if (has_shortcode($post->post_content, $shortcode)) {
             wp_enqueue_style('htp-public', HTP_URL . 'assets/css/public.css', [], HTP_VERSION);
+            wp_enqueue_script('htp-public', HTP_URL . 'assets/js/public.js', [], HTP_VERSION, true);
+            wp_localize_script('htp-public', 'HTPPublic', [
+                'submitting' => 'Đang gửi...',
+                'chooseImage' => 'Chọn ảnh',
+                'removeImage' => 'Xóa ảnh',
+            ]);
             break;
         }
     }

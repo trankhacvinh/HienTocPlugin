@@ -6,111 +6,86 @@ final class HTP_Reports_Page
 {
     public static function init(): void
     {
-        add_action('admin_menu', [self::class, 'register_page'], 13);
+        add_action('admin_menu', [self::class, 'register_page'], 15);
     }
 
     public static function register_page(): void
     {
-        add_submenu_page(
-            'htp-dashboard',
-            'Báo cáo',
-            'Báo cáo',
-            'htp_view_reports',
-            'htp-reports',
-            [self::class, 'render']
-        );
+        add_submenu_page('htp-dashboard', 'Báo cáo', 'Báo cáo', 'htp_view_reports', 'htp-reports', [self::class, 'render']);
     }
 
     public static function render(): void
     {
         if (!current_user_can('htp_view_reports')) {
-            wp_die(esc_html__('Bạn không có quyền truy cập.', 'hien-toc-plugin'));
+            wp_die('Bạn không có quyền truy cập.');
         }
-
-        $filters = [
-            'from' => isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '',
-            'to' => isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '',
-            'status' => '',
-            's' => '',
-            'salon_id' => 0,
-        ];
-        $allowed = current_user_can('htp_manage_registrations') ? null : HTP_User_Salon_Service::salon_ids_for_user();
-        $rows = (new HTP_Registration_Repository())->report_by_salon($filters, $allowed);
-
         global $wpdb;
+        $allowed = current_user_can('htp_manage_registrations') ? null : HTP_User_Salon_Service::salon_ids_for_user();
+        $filters = [
+            'from' => sanitize_text_field(wp_unslash($_GET['from'] ?? '')),
+            'to' => sanitize_text_field(wp_unslash($_GET['to'] ?? '')),
+        ];
+        $rows = (new HTP_Submission_Repository())->report_by_salon($filters, $allowed);
         $visits_table = $wpdb->prefix . 'htp_qr_visits';
-        $visit_where = [];
-        $visit_params = [];
-        if ($filters['from'] && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['from'])) {
-            $visit_where[] = 'DATE(visited_at) >= %s';
-            $visit_params[] = $filters['from'];
-        }
-        if ($filters['to'] && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['to'])) {
-            $visit_where[] = 'DATE(visited_at) <= %s';
-            $visit_params[] = $filters['to'];
-        }
+        $salons_table = $wpdb->prefix . 'htp_salons';
+        $where = [];
+        $params = [];
         if ($allowed !== null) {
             $ids = array_values(array_filter(array_map('absint', $allowed)));
-            if ($ids) {
-                $visit_where[] = 'salon_id IN (' . implode(',', array_fill(0, count($ids), '%d')) . ')';
-                $visit_params = array_merge($visit_params, $ids);
+            if (!$ids) {
+                $where[] = '1=0';
             } else {
-                $visit_where[] = '1=0';
+                $where[] = 'v.salon_id IN (' . implode(',', array_fill(0, count($ids), '%d')) . ')';
+                $params = array_merge($params, $ids);
             }
         }
-        $visit_sql = "SELECT COUNT(*) total, SUM(converted=1) converted, SUM(device_type='mobile') mobile FROM {$visits_table}";
-        if ($visit_where) {
-            $visit_sql .= ' WHERE ' . implode(' AND ', $visit_where);
+        foreach (['from' => '>=', 'to' => '<='] as $key => $operator) {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters[$key])) {
+                $where[] = "DATE(v.visited_at) {$operator} %s";
+                $params[] = $filters[$key];
+            }
         }
-        $visit_stats = $visit_params
-            ? $wpdb->get_row($wpdb->prepare($visit_sql, ...$visit_params), ARRAY_A)
-            : $wpdb->get_row($visit_sql, ARRAY_A);
-        $total_visits = (int) ($visit_stats['total'] ?? 0);
-        $converted = (int) ($visit_stats['converted'] ?? 0);
-        $conversion_rate = $total_visits > 0 ? round(($converted / $total_visits) * 100, 1) : 0;
+        $sql = "SELECT s.id, COUNT(v.id) visits, SUM(v.device_type='mobile') mobile_visits, SUM(v.converted=1) converted
+                FROM {$salons_table} s LEFT JOIN {$visits_table} v ON v.salon_id=s.id";
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+        $sql .= ' GROUP BY s.id';
+        $visit_rows = $params ? $wpdb->get_results($wpdb->prepare($sql, ...$params), OBJECT_K) : $wpdb->get_results($sql, OBJECT_K);
         ?>
         <div class="wrap htp-admin-wrap">
             <h1>Báo cáo</h1>
+            <form method="get" class="htp-panel htp-filter-form">
+                <input type="hidden" name="page" value="htp-reports">
+                <label>Từ ngày <input type="date" name="from" value="<?php echo esc_attr($filters['from']); ?>"></label>
+                <label>Đến ngày <input type="date" name="to" value="<?php echo esc_attr($filters['to']); ?>"></label>
+                <button class="button button-primary">Xem báo cáo</button>
+            </form>
             <section class="htp-panel">
-                <form method="get" class="htp-filter-form htp-filter-form--compact">
-                    <input type="hidden" name="page" value="htp-reports">
-                    <label><span>Từ ngày</span><input type="date" name="from" value="<?php echo esc_attr($filters['from']); ?>"></label>
-                    <label><span>Đến ngày</span><input type="date" name="to" value="<?php echo esc_attr($filters['to']); ?>"></label>
-                    <div class="htp-filter-actions"><button class="button button-primary">Xem báo cáo</button><a class="button" href="<?php echo esc_url(admin_url('admin.php?page=htp-reports')); ?>">Xóa lọc</a></div>
-                </form>
-            </section>
-
-            <div class="htp-stat-grid">
-                <div class="htp-stat"><span>Lượt mở QR/form</span><strong><?php echo esc_html((string) $total_visits); ?></strong><small><?php echo esc_html((string) ((int) ($visit_stats['mobile'] ?? 0))); ?> từ thiết bị di động</small></div>
-                <div class="htp-stat"><span>Chuyển thành đăng ký</span><strong><?php echo esc_html((string) $converted); ?></strong><small>Tỷ lệ <?php echo esc_html((string) $conversion_rate); ?>%</small></div>
-                <div class="htp-stat"><span>Tổng đăng ký</span><strong><?php echo esc_html((string) array_sum(array_map(static fn($r) => (int) $r->total, $rows))); ?></strong><small>Theo khoảng thời gian đã chọn</small></div>
-                <div class="htp-stat"><span>Đã hoàn thành</span><strong><?php echo esc_html((string) array_sum(array_map(static fn($r) => (int) $r->completed_count, $rows))); ?></strong><small>Hoàn tất quy trình</small></div>
-            </div>
-
-            <section class="htp-panel">
-                <h2>Kết quả theo salon</h2>
-                <div class="htp-table-wrap"><table class="widefat striped htp-responsive-table">
-                    <thead><tr><th>Salon</th><th>Tổng</th><th>Mới</th><th>Xác nhận</th><th>Tiếp nhận</th><th>Hoàn thành</th><th>Không đạt</th><th>Hủy</th><th>Trùng</th><th>Tỷ lệ hoàn thành</th></tr></thead>
-                    <tbody>
-                    <?php if (!$rows) : ?><tr><td colspan="10">Chưa có dữ liệu.</td></tr><?php endif; ?>
-                    <?php foreach ($rows as $row) :
-                        $rate = (int) $row->total > 0 ? round(((int) $row->completed_count / (int) $row->total) * 100, 1) : 0;
-                        ?>
-                        <tr>
-                            <td data-label="Salon"><strong><?php echo esc_html($row->code); ?></strong><br><small><?php echo esc_html($row->name); ?></small></td>
-                            <td data-label="Tổng"><?php echo esc_html((string) $row->total); ?></td>
-                            <td data-label="Mới"><?php echo esc_html((string) $row->new_count); ?></td>
-                            <td data-label="Xác nhận"><?php echo esc_html((string) $row->confirmed_count); ?></td>
-                            <td data-label="Tiếp nhận"><?php echo esc_html((string) $row->received_count); ?></td>
-                            <td data-label="Hoàn thành"><?php echo esc_html((string) $row->completed_count); ?></td>
-                            <td data-label="Không đạt"><?php echo esc_html((string) $row->rejected_count); ?></td>
-                            <td data-label="Hủy"><?php echo esc_html((string) $row->cancelled_count); ?></td>
-                            <td data-label="Trùng"><?php echo esc_html((string) $row->duplicate_count); ?></td>
-                            <td data-label="Tỷ lệ"><?php echo esc_html((string) $rate); ?>%</td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table></div>
+                <div class="htp-table-wrap">
+                    <table class="widefat striped htp-responsive-table">
+                        <thead><tr><th>Salon</th><th>Lượt mở landing</th><th>Mobile</th><th>Hiến tóc</th><th>Hoàn thành</th><th>Thành viên</th><th>Thành viên hoạt động</th><th>Tỷ lệ chuyển đổi</th></tr></thead>
+                        <tbody>
+                        <?php if (!$rows) : ?><tr><td colspan="8">Không có dữ liệu.</td></tr><?php else : foreach ($rows as $row) :
+                            $visit = $visit_rows[$row->id] ?? null;
+                            $visits = (int) ($visit->visits ?? 0);
+                            $converted = (int) ($visit->converted ?? 0);
+                            $rate = $visits > 0 ? round($converted * 100 / $visits, 1) : 0;
+                            ?>
+                            <tr>
+                                <td data-label="Salon"><strong><?php echo esc_html($row->code); ?></strong><br><?php echo esc_html($row->name); ?></td>
+                                <td data-label="Lượt mở"><?php echo esc_html(number_format_i18n($visits)); ?></td>
+                                <td data-label="Mobile"><?php echo esc_html(number_format_i18n((int) ($visit->mobile_visits ?? 0))); ?></td>
+                                <td data-label="Hiến tóc"><?php echo esc_html(number_format_i18n((int) $row->donation_count)); ?></td>
+                                <td data-label="Hoàn thành"><?php echo esc_html(number_format_i18n((int) $row->completed_count)); ?></td>
+                                <td data-label="Thành viên"><?php echo esc_html(number_format_i18n((int) $row->member_count)); ?></td>
+                                <td data-label="Hoạt động"><?php echo esc_html(number_format_i18n((int) $row->active_member_count)); ?></td>
+                                <td data-label="Chuyển đổi"><?php echo esc_html($rate . '%'); ?></td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </section>
         </div>
         <?php
