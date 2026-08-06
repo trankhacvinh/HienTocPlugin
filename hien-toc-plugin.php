@@ -21,6 +21,7 @@ require_once HTP_PATH . 'includes/class-htp-salon-repository.php';
 require_once HTP_PATH . 'includes/class-htp-registration-service.php';
 require_once HTP_PATH . 'public/class-htp-shortcodes.php';
 require_once HTP_PATH . 'admin/class-htp-admin.php';
+require_once HTP_PATH . 'admin/class-htp-settings.php';
 
 register_activation_hook(__FILE__, ['HTP_Installer', 'activate']);
 
@@ -31,6 +32,7 @@ add_action('plugins_loaded', static function (): void {
 
     if (is_admin()) {
         HTP_Admin::init();
+        HTP_Settings::init();
     }
 });
 
