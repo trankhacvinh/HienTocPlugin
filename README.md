@@ -1,39 +1,68 @@
 # HienTocPlugin
 
-Plugin WordPress quản lý chương trình hiến tóc theo salon.
+Plugin WordPress quản lý chương trình hiến tóc theo salon, ưu tiên trải nghiệm khách hàng trên điện thoại.
 
-## Trạng thái hiện tại
+## Chức năng chính
 
-Bản nền tảng MVP đầu tiên đã có:
-
-- Tạo bảng salon, đăng ký và lịch sử trạng thái khi kích hoạt plugin.
-- Vai trò `Quản lý chương trình hiến tóc` và `Tài khoản salon`.
-- Trang quản trị tổng quan và tạo salon cơ bản.
+- Quản lý salon, trạng thái hoạt động và người phụ trách.
 - Chọn một trang WordPress bất kỳ làm trang đăng ký.
-- Shortcode `[htp_registration_form]` đọc mã salon từ `?salon=XXXX`.
-- Shortcode `[htp_salon_info]` chỉ hiển thị thông tin salon.
-- Form public mobile-first, hiển thị rõ salon trước khi khách nhập thông tin.
-- Lưu đăng ký, sinh mã dạng `MH001-000001` và ghi lịch sử ban đầu.
-- Nonce, honeypot, kiểm tra dữ liệu và xác thực lại salon ở backend.
-
-## Cách thử nhanh
-
-1. Cài plugin vào WordPress và kích hoạt.
-2. Vào **Hiến tóc → Cài đặt**, chọn một trang WordPress.
-3. Chèn shortcode `[htp_registration_form]` vào trang đó.
-4. Vào **Hiến tóc → Salon**, tạo salon mã `MH001`.
-5. Mở đường dẫn của salon, ví dụ:
-
-```text
-https://domain.com/dang-ky/?salon=MH001
-```
+- Shortcode `[htp_registration_form]` tự đọc `?salon=XXXX`, hiển thị đúng thông tin salon và form mobile-first.
+- Shortcode `[htp_salon_info]`, `[htp_registration_lookup]`, `[htp_salon_list]`, `[htp_statistics]`.
+- Sinh đường dẫn và QR riêng cho từng salon.
+- Quản lý đăng ký, tìm kiếm, lọc, chỉnh sửa và cập nhật trạng thái.
+- Lịch sử trạng thái, nhật ký hoạt động và báo cáo theo salon.
+- Tài khoản Quản lý chương trình và Tài khoản salon, phân quyền theo salon.
+- Xuất CSV theo bộ lọc.
+- Cảnh báo đăng ký trùng theo số điện thoại trong khoảng ngày cấu hình.
+- Khi xóa plugin, `uninstall.php` xóa toàn bộ bảng, tùy chọn, vai trò và metadata do plugin tạo.
 
 ## Yêu cầu
 
 - WordPress 6.4+
 - PHP 8.1+
-- MySQL hoặc MariaDB theo yêu cầu của WordPress
+- MySQL/MariaDB theo yêu cầu của WordPress
+- Máy chủ cần truy cập được `quickchart.io` để hiển thị/tải ảnh QR mặc định. Có thể thay URL QR bằng filter `htp_qr_image_url`.
 
-## Ghi chú phát triển
+## Cài đặt
 
-Mã nguồn hiện ở giai đoạn nền tảng. Các module danh sách đăng ký, cập nhật trạng thái, QR, phân quyền theo salon, báo cáo và xuất dữ liệu sẽ được bổ sung ở các pull request tiếp theo.
+1. Đặt thư mục plugin vào `wp-content/plugins/hien-toc-plugin` hoặc đóng gói thành ZIP và upload trong WordPress.
+2. Kích hoạt plugin.
+3. Plugin tự tạo trang đăng ký và trang tra cứu mặc định.
+4. Vào **Hiến tóc → Cài đặt** để chọn trang WordPress khác nếu cần.
+5. Tạo salon tại **Hiến tóc → Salon**.
+6. Sao chép link hoặc tải QR của salon.
+
+## Shortcodes
+
+```text
+[htp_registration_form]
+[htp_salon_info]
+[htp_registration_lookup]
+[htp_salon_list]
+[htp_statistics]
+```
+
+Ví dụ đường dẫn:
+
+```text
+https://domain.com/dang-ky-hien-toc/?salon=MH001
+```
+
+## Quy trình trạng thái
+
+- `new` — Mới đăng ký
+- `confirmed` — Đã xác nhận
+- `received` — Đã tiếp nhận
+- `completed` — Đã hoàn thành
+- `rejected` — Không đạt yêu cầu
+- `cancelled` — Đã hủy
+- `duplicate` — Trùng đăng ký
+
+Tài khoản salon chỉ được chuyển theo luồng nghiệp vụ. Quản lý chương trình có thể điều chỉnh trạng thái khi cần xử lý ngoại lệ.
+
+## Xóa plugin
+
+- **Vô hiệu hóa**: giữ nguyên dữ liệu.
+- **Xóa plugin trong WordPress**: xóa toàn bộ bảng và cấu hình của plugin.
+
+Hãy xuất CSV hoặc sao lưu database trước khi xóa plugin.
