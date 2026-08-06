@@ -1,22 +1,28 @@
-=== Hiến Tóc Plugin ===
-Contributors: trankhacvinh
+=== Hien Toc Plugin ===
+Contributors: HienTocPlugin
 Requires at least: 6.4
 Requires PHP: 8.1
-Stable tag: 1.0.0
+Stable tag: 2.0.1
 License: GPLv2 or later
 
-Quản lý salon, QR, đăng ký hiến tóc, trạng thái, tài khoản và báo cáo trong WordPress.
+Plugin quản lý landing salon, đăng ký hiến tóc và thành viên MyHair.
 
 == Description ==
 
-Plugin hỗ trợ trang đăng ký linh hoạt bằng shortcode và tham số ?salon=XXXX. Form được thiết kế mobile-first và tự hiển thị thông tin salon tương ứng.
+Mỗi salon có landing và QR riêng. Landing chứa hai tab form hiến tóc/thành viên, form cấu hình được, hỗ trợ ảnh, phân trang và xuất Excel.
 
 == Installation ==
 
-1. Upload plugin và kích hoạt.
-2. Vào Hiến tóc → Cài đặt để chọn trang đăng ký.
-3. Tạo salon và sử dụng QR/đường dẫn do plugin tạo.
+1. Upload ZIP tại Plugins > Add New.
+2. Activate.
+3. Tạo salon và trang landing mặc định.
+4. Cấu hình form và URL OA.
 
-== Uninstall ==
+== Changelog ==
 
-Khi xóa plugin, toàn bộ bảng dữ liệu và tùy chọn do plugin tạo sẽ bị xóa. Hãy sao lưu trước.
+= 2.0.1 =
+* Landing riêng cho từng salon.
+* Hai form dạng tab.
+* Form builder dùng chung toàn hệ thống.
+* Ảnh đại diện và ảnh tóc.
+* Danh sách phân trang và xuất Excel.

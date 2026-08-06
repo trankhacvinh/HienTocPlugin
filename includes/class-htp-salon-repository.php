@@ -93,6 +93,15 @@ final class HTP_Salon_Repository
         }
     }
 
+    public function set_landing_page(int $id, int $page_id): void
+    {
+        global $wpdb;
+        $wpdb->update($this->table, [
+            'landing_page_id' => $page_id ?: null,
+            'updated_at' => current_time('mysql'),
+        ], ['id' => $id]);
+    }
+
     public function set_status(int $id, string $status): void
     {
         global $wpdb;
@@ -131,7 +140,12 @@ final class HTP_Salon_Repository
             'phone' => sanitize_text_field((string) ($data['phone'] ?? '')),
             'email' => sanitize_email((string) ($data['email'] ?? '')),
             'manager_name' => sanitize_text_field((string) ($data['manager_name'] ?? '')),
+            'intro' => wp_kses_post((string) ($data['intro'] ?? '')),
             'instruction' => wp_kses_post((string) ($data['instruction'] ?? '')),
+            'opening_hours' => sanitize_textarea_field((string) ($data['opening_hours'] ?? '')),
+            'map_url' => esc_url_raw((string) ($data['map_url'] ?? '')),
+            'oa_url' => esc_url_raw((string) ($data['oa_url'] ?? '')),
+            'landing_page_id' => absint($data['landing_page_id'] ?? 0) ?: null,
             'status' => ($data['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active',
         ];
     }

@@ -6,20 +6,26 @@ final class HTP_QR_Service
 {
     public static function registration_url(object $salon): string
     {
-        $page_id = (int) get_option('htp_registration_page_id', 0);
-        $base_url = $page_id ? get_permalink($page_id) : home_url('/');
-        return add_query_arg('salon', rawurlencode((string) $salon->code), $base_url);
+        $page_id = absint($salon->landing_page_id ?? 0);
+        if ($page_id) {
+            $permalink = get_permalink($page_id);
+            if ($permalink) {
+                return $permalink;
+            }
+        }
+
+        return home_url('/' . sanitize_title(strtolower((string) $salon->code)) . '/');
     }
 
-    public static function image_url(string $text, int $size = 320): string
+    public static function image_url(string $url, int $size = 300): string
     {
-        $size = max(160, min(1000, $size));
-        $url = add_query_arg([
-            'text' => $text,
+        $size = max(120, min(1000, $size));
+        $default = add_query_arg([
+            'text' => $url,
             'size' => $size,
-            'margin' => 2,
             'format' => 'png',
+            'margin' => 2,
         ], 'https://quickchart.io/qr');
-        return (string) apply_filters('htp_qr_image_url', $url, $text, $size);
+        return (string) apply_filters('htp_qr_image_url', $default, $url, $size);
     }
 }

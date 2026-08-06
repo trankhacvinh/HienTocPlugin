@@ -6,125 +6,96 @@ final class HTP_Settings
 {
     public static function init(): void
     {
-        add_action('admin_menu', [self::class, 'register_page'], 15);
+        add_action('admin_menu', [self::class, 'register_page']);
         add_action('admin_init', [self::class, 'register_settings']);
-        add_action('update_option_htp_registration_page_id', [self::class, 'log_settings'], 10, 2);
+        add_action('admin_post_htp_enable_pretty_permalinks', [self::class, 'enable_pretty_permalinks']);
     }
 
     public static function register_page(): void
     {
-        add_submenu_page(
-            'htp-dashboard',
-            'Cài đặt',
-            'Cài đặt',
-            'htp_manage_settings',
-            'htp-settings',
-            [self::class, 'render']
-        );
+        add_submenu_page('htp-dashboard', 'Cài đặt', 'Cài đặt', 'htp_manage_settings', 'htp-settings', [self::class, 'render']);
     }
 
     public static function register_settings(): void
     {
-        register_setting('htp_settings', 'htp_registration_page_id', ['type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0]);
-        register_setting('htp_settings', 'htp_lookup_page_id', ['type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0]);
-        foreach (['htp_enable_date_of_birth', 'htp_enable_email', 'htp_enable_address', 'htp_enable_customer_note'] as $option) {
-            register_setting('htp_settings', $option, ['type' => 'boolean', 'sanitize_callback' => static fn($value) => $value ? 1 : 0, 'default' => 1]);
+        $settings = [
+            'htp_lookup_page_id' => ['type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0],
+            'htp_oa_url' => ['type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''],
+            'htp_oa_button_label' => ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'Quan tâm OA MyHair'],
+            'htp_upload_max_mb' => ['type' => 'integer', 'sanitize_callback' => [self::class, 'sanitize_upload_mb'], 'default' => 5],
+            'htp_hair_photo_limit' => ['type' => 'integer', 'sanitize_callback' => [self::class, 'sanitize_photo_limit'], 'default' => 3],
+            'htp_duplicate_days' => ['type' => 'integer', 'sanitize_callback' => [self::class, 'sanitize_duplicate_days'], 'default' => 30],
+            'htp_privacy_text' => ['type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field', 'default' => 'Tôi đồng ý cung cấp thông tin cho chương trình MyHair.'],
+        ];
+        foreach ($settings as $name => $args) {
+            register_setting('htp_settings', $name, $args);
         }
-        register_setting('htp_settings', 'htp_duplicate_days', [
-            'type' => 'integer',
-            'sanitize_callback' => static fn($value) => max(1, min(365, absint($value))),
-            'default' => 30,
-        ]);
-        register_setting('htp_settings', 'htp_privacy_text', ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field']);
-        register_setting('htp_settings', 'htp_success_text', ['type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field']);
     }
 
     public static function render(): void
     {
         if (!current_user_can('htp_manage_settings')) {
-            wp_die(esc_html__('Bạn không có quyền truy cập.', 'hien-toc-plugin'));
+            wp_die('Bạn không có quyền truy cập.');
         }
-
-        $registration_page = (int) get_option('htp_registration_page_id', 0);
-        $lookup_page = (int) get_option('htp_lookup_page_id', 0);
+        HTP_Admin::notice_from_query();
+        $structure = (string) get_option('permalink_structure', '');
+        $pretty = $structure !== '' && !str_contains($structure, 'index.php');
         ?>
         <div class="wrap htp-admin-wrap">
-            <h1>Cài đặt Hiến tóc</h1>
-            <?php settings_errors(); ?>
-            <form method="post" action="options.php">
+            <h1>Cài đặt MyHair</h1>
+
+            <section class="htp-panel">
+                <h2>Đường dẫn đẹp</h2>
+                <p>Trạng thái: <strong><?php echo $pretty ? 'Đạt' : 'Chưa đạt'; ?></strong></p>
+                <p>Cấu trúc hiện tại: <code><?php echo esc_html($structure ?: '(mặc định)'); ?></code></p>
+                <?php if (!$pretty) : ?>
+                    <p>URL có thể xuất hiện dạng <code>/index.php/salon001/</code>. Bấm nút bên dưới để chuyển sang <code>/%postname%/</code>.</p>
+                    <p><strong>Lưu ý:</strong> Máy chủ cần hỗ trợ rewrite. Nếu sau khi bật bị lỗi 404, hãy bật Apache mod_rewrite hoặc cấu hình rewrite trên Nginx/IIS.</p>
+                    <a class="button button-primary" href="<?php echo esc_url(wp_nonce_url(add_query_arg('action', 'htp_enable_pretty_permalinks', admin_url('admin-post.php')), 'htp_enable_pretty_permalinks')); ?>">Bật đường dẫn đẹp</a>
+                <?php else : ?><p>Trang salon sẽ có dạng <code><?php echo esc_html(home_url('/salon001/')); ?></code>.</p><?php endif; ?>
+            </section>
+
+            <form method="post" action="options.php" class="htp-panel">
                 <?php settings_fields('htp_settings'); ?>
-                <section class="htp-panel">
-                    <h2>Trang WordPress và shortcode</h2>
-                    <table class="form-table" role="presentation">
-                        <tr>
-                            <th><label for="htp-registration-page">Trang đăng ký</label></th>
-                            <td>
-                                <?php wp_dropdown_pages(['name' => 'htp_registration_page_id', 'id' => 'htp-registration-page', 'selected' => $registration_page, 'show_option_none' => '— Chọn trang —', 'option_none_value' => 0]); ?>
-                                <p class="description">Trang cần chứa shortcode <code>[htp_registration_form]</code>. Mọi QR salon sẽ dùng permalink của trang này và thêm <code>?salon=XXXX</code>.</p>
-                                <?php self::shortcode_status($registration_page, 'htp_registration_form'); ?>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th><label for="htp-lookup-page">Trang tra cứu</label></th>
-                            <td>
-                                <?php wp_dropdown_pages(['name' => 'htp_lookup_page_id', 'id' => 'htp-lookup-page', 'selected' => $lookup_page, 'show_option_none' => '— Chọn trang —', 'option_none_value' => 0]); ?>
-                                <p class="description">Trang cần chứa shortcode <code>[htp_registration_lookup]</code>.</p>
-                                <?php self::shortcode_status($lookup_page, 'htp_registration_lookup'); ?>
-                            </td>
-                        </tr>
-                    </table>
-                </section>
-
-                <section class="htp-panel">
-                    <h2>Cấu hình form public</h2>
-                    <div class="htp-settings-checks">
-                        <?php foreach ([
-                            'htp_enable_date_of_birth' => 'Hiển thị ngày sinh',
-                            'htp_enable_email' => 'Hiển thị email',
-                            'htp_enable_address' => 'Hiển thị địa chỉ',
-                            'htp_enable_customer_note' => 'Hiển thị ghi chú khách hàng',
-                        ] as $option => $label) : ?>
-                            <label><input type="hidden" name="<?php echo esc_attr($option); ?>" value="0"><input type="checkbox" name="<?php echo esc_attr($option); ?>" value="1" <?php checked(get_option($option, 1), 1); ?>> <?php echo esc_html($label); ?></label>
-                        <?php endforeach; ?>
-                    </div>
-                    <table class="form-table" role="presentation">
-                        <tr><th><label for="htp-duplicate-days">Cảnh báo đăng ký trùng</label></th><td><input id="htp-duplicate-days" type="number" min="1" max="365" name="htp_duplicate_days" value="<?php echo esc_attr((string) get_option('htp_duplicate_days', 30)); ?>"> ngày gần nhất</td></tr>
-                        <tr><th><label for="htp-privacy-text">Nội dung đồng ý dữ liệu</label></th><td><input id="htp-privacy-text" class="large-text" name="htp_privacy_text" value="<?php echo esc_attr((string) get_option('htp_privacy_text')); ?>"></td></tr>
-                        <tr><th><label for="htp-success-text">Thông báo sau đăng ký</label></th><td><textarea id="htp-success-text" class="large-text" rows="3" name="htp_success_text"><?php echo esc_textarea((string) get_option('htp_success_text')); ?></textarea></td></tr>
-                    </table>
-                </section>
-
-                <section class="htp-panel htp-danger-panel">
-                    <h2>Gỡ cài đặt</h2>
-                    <p>Khi plugin bị <strong>xóa</strong> trong trang Plugins, file <code>uninstall.php</code> sẽ xóa toàn bộ bảng dữ liệu, tùy chọn, vai trò và metadata do plugin tạo. Vô hiệu hóa plugin không xóa dữ liệu.</p>
-                    <p><strong>Hãy xuất CSV hoặc sao lưu database trước khi xóa plugin.</strong></p>
-                </section>
-
+                <table class="form-table" role="presentation">
+                    <tr><th><label for="htp-lookup-page">Trang tra cứu</label></th><td><?php wp_dropdown_pages(['name' => 'htp_lookup_page_id', 'id' => 'htp-lookup-page', 'selected' => absint(get_option('htp_lookup_page_id')), 'show_option_none' => '— Chọn trang —', 'option_none_value' => 0]); ?><p class="description">Trang nên chứa shortcode <code>[htp_registration_lookup]</code>.</p></td></tr>
+                    <tr><th><label for="htp-oa-url">URL OA MyHair chung</label></th><td><input id="htp-oa-url" name="htp_oa_url" type="url" class="regular-text" value="<?php echo esc_attr((string) get_option('htp_oa_url', '')); ?>"><p class="description">Salon có thể nhập URL riêng; nếu để trống sẽ dùng URL này.</p></td></tr>
+                    <tr><th><label for="htp-oa-label">Nhãn nút OA</label></th><td><input id="htp-oa-label" name="htp_oa_button_label" class="regular-text" value="<?php echo esc_attr((string) get_option('htp_oa_button_label', 'Quan tâm OA MyHair')); ?>"></td></tr>
+                    <tr><th><label for="htp-upload-max">Dung lượng tối đa mỗi ảnh</label></th><td><input id="htp-upload-max" name="htp_upload_max_mb" type="number" min="1" max="20" value="<?php echo esc_attr((string) get_option('htp_upload_max_mb', 5)); ?>"> MB</td></tr>
+                    <tr><th><label for="htp-photo-limit">Số ảnh tóc tối đa</label></th><td><input id="htp-photo-limit" name="htp_hair_photo_limit" type="number" min="1" max="10" value="<?php echo esc_attr((string) get_option('htp_hair_photo_limit', 3)); ?>"></td></tr>
+                    <tr><th><label for="htp-duplicate-days">Khoảng cảnh báo trùng</label></th><td><input id="htp-duplicate-days" name="htp_duplicate_days" type="number" min="1" max="365" value="<?php echo esc_attr((string) get_option('htp_duplicate_days', 30)); ?>"> ngày</td></tr>
+                    <tr><th><label for="htp-privacy">Nội dung đồng ý chung</label></th><td><textarea id="htp-privacy" name="htp_privacy_text" class="large-text" rows="3"><?php echo esc_textarea((string) get_option('htp_privacy_text', '')); ?></textarea><p class="description">Có thể thay đổi riêng nhãn trường đồng ý trong Cấu hình form.</p></td></tr>
+                </table>
                 <?php submit_button('Lưu cài đặt'); ?>
             </form>
         </div>
         <?php
     }
 
-    public static function log_settings(mixed $old, mixed $new): void
+    public static function enable_pretty_permalinks(): void
     {
-        HTP_Activity_Logger::log('settings_updated', 'settings', null, ['registration_page_id' => (int) $new]);
+        if (!current_user_can('manage_options')) {
+            wp_die('Không có quyền.');
+        }
+        check_admin_referer('htp_enable_pretty_permalinks');
+        update_option('permalink_structure', '/%postname%/');
+        flush_rewrite_rules(true);
+        wp_safe_redirect(add_query_arg(['page' => 'htp-settings', 'htp_message' => 'permalink'], admin_url('admin.php')));
+        exit;
     }
 
-    private static function shortcode_status(int $page_id, string $shortcode): void
+    public static function sanitize_upload_mb(mixed $value): int
     {
-        if (!$page_id) {
-            return;
-        }
-        $page = get_post($page_id);
-        if (!$page) {
-            echo '<p class="htp-check-bad">Không tìm thấy trang đã chọn.</p>';
-            return;
-        }
-        if (has_shortcode($page->post_content, $shortcode)) {
-            echo '<p class="htp-check-good">✓ Trang đã có shortcode yêu cầu. <a href="' . esc_url(get_permalink($page_id)) . '" target="_blank" rel="noopener">Mở trang</a></p>';
-        } else {
-            echo '<p class="htp-check-bad">⚠ Trang chưa có shortcode <code>[' . esc_html($shortcode) . ']</code>.</p>';
-        }
+        return max(1, min(20, absint($value)));
+    }
+
+    public static function sanitize_photo_limit(mixed $value): int
+    {
+        return max(1, min(10, absint($value)));
+    }
+
+    public static function sanitize_duplicate_days(mixed $value): int
+    {
+        return max(1, min(365, absint($value)));
     }
 }
