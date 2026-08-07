@@ -31,6 +31,7 @@ final class HTP_Admin
             return;
         }
         wp_enqueue_style('htp-admin', HTP_URL . 'assets/css/admin.css', [], HTP_VERSION);
+        wp_enqueue_style('htp-admin-form-fix', HTP_URL . 'assets/css/admin-form-fix.css', ['htp-admin'], HTP_VERSION);
         wp_enqueue_script('htp-admin', HTP_URL . 'assets/js/admin.js', [], HTP_VERSION, true);
         wp_localize_script('htp-admin', 'HTPAdmin', [
             'copied' => 'Đã sao chép đường dẫn.',
