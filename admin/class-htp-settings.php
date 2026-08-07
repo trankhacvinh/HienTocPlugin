@@ -14,6 +14,9 @@ final class HTP_Settings
         add_action('admin_post_htp_import_backup', [HTP_Backup_Service::class, 'import_uploaded']);
         add_action('admin_post_htp_restore_server_backup', [HTP_Backup_Service::class, 'restore_server_backup']);
         add_action('admin_post_htp_delete_server_backup', [HTP_Backup_Service::class, 'delete_server_backup']);
+        add_action('admin_post_htp_test_google_sheets', [self::class, 'test_google_sheets']);
+        add_action('admin_post_htp_sync_all_google_sheets', [self::class, 'sync_all_google_sheets']);
+        add_action('admin_post_htp_process_google_sheets_queue', [self::class, 'process_google_sheets_queue']);
     }
 
     public static function register_page(): void
@@ -35,6 +38,17 @@ final class HTP_Settings
         foreach ($settings as $name => $args) {
             register_setting('htp_settings', $name, $args);
         }
+
+        $google_settings = [
+            'htp_google_sheets_enabled' => ['type' => 'boolean', 'sanitize_callback' => [self::class, 'sanitize_checkbox'], 'default' => 0],
+            'htp_google_sheets_webhook_url' => ['type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''],
+            'htp_google_sheets_secret' => ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => ''],
+            'htp_google_sheets_donation_tab' => ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'Hien toc'],
+            'htp_google_sheets_member_tab' => ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'Thanh vien'],
+        ];
+        foreach ($google_settings as $name => $args) {
+            register_setting('htp_google_sheets_settings', $name, $args);
+        }
     }
 
     public static function render(): void
@@ -46,11 +60,63 @@ final class HTP_Settings
         $structure = (string) get_option('permalink_structure', '');
         $pretty = $structure !== '' && !str_contains($structure, 'index.php');
         $server_backups = current_user_can('manage_options') ? HTP_Backup_Service::server_backups(10) : [];
+        $pending_sync = current_user_can('manage_options') ? HTP_Google_Sheets_Service::pending_count() : 0;
+        $sync_errors = current_user_can('manage_options') ? HTP_Google_Sheets_Service::recent_errors(5) : [];
+        $last_sync_at = (string) get_option('htp_google_sheets_last_sync_at', '');
+        $last_summary = json_decode((string) get_option('htp_google_sheets_last_sync_summary', ''), true);
         ?>
         <div class="wrap htp-admin-wrap">
             <h1>Cài đặt MyHair</h1>
 
             <?php if (current_user_can('manage_options')) : ?>
+                <section class="htp-panel">
+                    <h2>Đồng bộ Google Sheets</h2>
+                    <p>Kết nối bằng <strong>Google Apps Script Web App</strong>, phù hợp cả hosting PHP thông thường và không cần cài thư viện Google API trên máy chủ.</p>
+                    <p>Mỗi đăng ký mới hoặc thay đổi trạng thái sẽ được đưa vào hàng đợi. Nếu Google tạm lỗi, plugin giữ dữ liệu trong database và tự thử lại theo chu kỳ, nên việc đăng ký của khách không phụ thuộc vào Google Sheets.</p>
+
+                    <form method="post" action="options.php">
+                        <?php settings_fields('htp_google_sheets_settings'); ?>
+                        <table class="form-table" role="presentation">
+                            <tr><th>Trạng thái</th><td><label><input type="checkbox" name="htp_google_sheets_enabled" value="1" <?php checked((int) get_option('htp_google_sheets_enabled', 0), 1); ?>> Bật đồng bộ Google Sheets</label></td></tr>
+                            <tr><th><label for="htp-google-webhook">Apps Script Web App URL</label></th><td><input id="htp-google-webhook" name="htp_google_sheets_webhook_url" type="url" class="large-text" placeholder="https://script.google.com/macros/s/.../exec" value="<?php echo esc_attr((string) get_option('htp_google_sheets_webhook_url', '')); ?>"><p class="description">Dùng URL kết thúc bằng <code>/exec</code> sau khi Deploy Apps Script thành Web App.</p></td></tr>
+                            <tr><th><label for="htp-google-secret">Secret key</label></th><td><input id="htp-google-secret" name="htp_google_sheets_secret" type="password" class="regular-text" autocomplete="new-password" value="<?php echo esc_attr((string) get_option('htp_google_sheets_secret', '')); ?>"><p class="description">Nhập cùng một chuỗi bí mật trong WordPress và biến <code>MYHAIR_SECRET</code> của Apps Script.</p></td></tr>
+                            <tr><th><label for="htp-google-donation-tab">Sheet hiến tóc</label></th><td><input id="htp-google-donation-tab" name="htp_google_sheets_donation_tab" class="regular-text" value="<?php echo esc_attr((string) get_option('htp_google_sheets_donation_tab', 'Hien toc')); ?>"></td></tr>
+                            <tr><th><label for="htp-google-member-tab">Sheet thành viên</label></th><td><input id="htp-google-member-tab" name="htp_google_sheets_member_tab" class="regular-text" value="<?php echo esc_attr((string) get_option('htp_google_sheets_member_tab', 'Thanh vien')); ?>"></td></tr>
+                        </table>
+                        <?php submit_button('Lưu cấu hình Google Sheets'); ?>
+                    </form>
+
+                    <div class="htp-two-column">
+                        <div>
+                            <h3>Thiết lập Google Sheet</h3>
+                            <ol>
+                                <li>Tạo hoặc mở Google Sheet muốn nhận dữ liệu.</li>
+                                <li>Vào <strong>Extensions → Apps Script</strong>.</li>
+                                <li>Mở mã mẫu của plugin, dán vào Apps Script và đổi <code>MYHAIR_SECRET</code> cho trùng với Secret key ở trên.</li>
+                                <li>Chọn <strong>Deploy → New deployment → Web app</strong>, chạy dưới tài khoản của bạn và cấp quyền truy cập Web App phù hợp.</li>
+                                <li>Dán URL <code>/exec</code> vào cấu hình rồi bấm <strong>Kiểm tra kết nối</strong>.</li>
+                            </ol>
+                            <p><a class="button" href="<?php echo esc_url(HTP_URL . 'docs/google-sheets-apps-script.gs'); ?>" target="_blank" rel="noopener">Mở mã Apps Script mẫu</a></p>
+                        </div>
+                        <div>
+                            <h3>Tình trạng đồng bộ</h3>
+                            <p><strong>Hàng đợi:</strong> <?php echo esc_html(number_format_i18n($pending_sync)); ?> bản ghi.</p>
+                            <p><strong>Lần xử lý gần nhất:</strong> <?php echo esc_html($last_sync_at ? mysql2date('d/m/Y H:i:s', $last_sync_at) : 'Chưa có'); ?></p>
+                            <?php if (is_array($last_summary)) : ?><p><strong>Kết quả:</strong> thành công <?php echo esc_html((string) ($last_summary['success'] ?? 0)); ?> · lỗi <?php echo esc_html((string) ($last_summary['failed'] ?? 0)); ?> · còn chờ <?php echo esc_html((string) ($last_summary['pending'] ?? 0)); ?></p><?php endif; ?>
+                            <div class="htp-inline-actions">
+                                <a class="button" href="<?php echo esc_url(wp_nonce_url(add_query_arg('action', 'htp_test_google_sheets', admin_url('admin-post.php')), 'htp_test_google_sheets')); ?>">Kiểm tra kết nối</a>
+                                <a class="button" href="<?php echo esc_url(wp_nonce_url(add_query_arg('action', 'htp_process_google_sheets_queue', admin_url('admin-post.php')), 'htp_process_google_sheets_queue')); ?>">Đồng bộ hàng đợi ngay</a>
+                                <a class="button button-primary" href="<?php echo esc_url(wp_nonce_url(add_query_arg('action', 'htp_sync_all_google_sheets', admin_url('admin-post.php')), 'htp_sync_all_google_sheets')); ?>" onclick="return confirm('Đưa toàn bộ dữ liệu hiện có vào hàng đợi Google Sheets? Các dòng có cùng mã đăng ký sẽ được cập nhật, không tạo trùng.');">Đồng bộ lại toàn bộ dữ liệu</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <?php if ($sync_errors) : ?>
+                        <h3>Lỗi đồng bộ gần đây</h3>
+                        <div class="htp-table-wrap"><table class="widefat striped"><thead><tr><th>Mã</th><th>Số lần thử</th><th>Lỗi</th><th>Thử lại sau</th></tr></thead><tbody><?php foreach ($sync_errors as $error) : ?><tr><td><?php echo esc_html($error->submission_code ?: ('#' . $error->submission_id)); ?></td><td><?php echo esc_html((string) $error->attempts); ?></td><td><?php echo esc_html($error->last_error); ?></td><td><?php echo esc_html(mysql2date('d/m/Y H:i:s', $error->available_at)); ?></td></tr><?php endforeach; ?></tbody></table></div>
+                    <?php endif; ?>
+                </section>
+
                 <section class="htp-panel">
                     <h2>Sao lưu & khôi phục dữ liệu</h2>
                     <p><strong>Nên tạo một bản sao lưu trước khi cập nhật, xóa hoặc cài lại plugin.</strong> File sao lưu MyHair chứa dữ liệu salon, hai form, khách hiến tóc, thành viên, trạng thái, phân quyền salon, cấu hình, landing page và các ảnh được hệ thống quản lý.</p>
@@ -179,6 +245,45 @@ final class HTP_Settings
         }
     }
 
+    public static function test_google_sheets(): void
+    {
+        self::assert_admin();
+        check_admin_referer('htp_test_google_sheets');
+        try {
+            HTP_Google_Sheets_Service::test_connection();
+        } catch (Throwable $exception) {
+            wp_die(esc_html('Kiểm tra Google Sheets thất bại: ' . $exception->getMessage()));
+        }
+        wp_safe_redirect(add_query_arg(['page' => 'htp-settings', 'htp_message' => 'google_test_ok'], admin_url('admin.php')));
+        exit;
+    }
+
+    public static function sync_all_google_sheets(): void
+    {
+        self::assert_admin();
+        check_admin_referer('htp_sync_all_google_sheets');
+        if (!HTP_Google_Sheets_Service::enabled()) {
+            wp_die('Hãy bật và lưu cấu hình Google Sheets trước.');
+        }
+        $count = HTP_Google_Sheets_Service::queue_all();
+        HTP_Google_Sheets_Service::process_queue(20);
+        HTP_Activity_Logger::log('google_sheets_full_sync_queued', 'integration', 0, ['count' => $count]);
+        wp_safe_redirect(add_query_arg(['page' => 'htp-settings', 'htp_message' => 'google_queued'], admin_url('admin.php')));
+        exit;
+    }
+
+    public static function process_google_sheets_queue(): void
+    {
+        self::assert_admin();
+        check_admin_referer('htp_process_google_sheets_queue');
+        if (!HTP_Google_Sheets_Service::enabled()) {
+            wp_die('Hãy bật và lưu cấu hình Google Sheets trước.');
+        }
+        HTP_Google_Sheets_Service::process_queue(50);
+        wp_safe_redirect(add_query_arg(['page' => 'htp-settings', 'htp_message' => 'google_processed'], admin_url('admin.php')));
+        exit;
+    }
+
     public static function sanitize_upload_mb(mixed $value): int
     {
         return max(1, min(20, absint($value)));
@@ -192,5 +297,17 @@ final class HTP_Settings
     public static function sanitize_duplicate_days(mixed $value): int
     {
         return max(1, min(365, absint($value)));
+    }
+
+    public static function sanitize_checkbox(mixed $value): int
+    {
+        return empty($value) ? 0 : 1;
+    }
+
+    private static function assert_admin(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Bạn không có quyền thực hiện thao tác này.');
+        }
     }
 }
