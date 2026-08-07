@@ -29,6 +29,7 @@ final class HTP_Salons_Page
         $edit_id = absint($_GET['salon_id'] ?? 0);
         $editing = $edit_id ? $repository->find_by_id($edit_id) : null;
         $salons = $repository->all();
+        $owner_users = HTP_Owner_Service::owner_users();
         ?>
         <div class="wrap htp-admin-wrap">
             <h1><?php echo $editing ? 'Sửa salon' : 'Quản lý salon'; ?></h1>
@@ -41,12 +42,13 @@ final class HTP_Salons_Page
                         <input type="hidden" name="salon_id" value="<?php echo esc_attr((string) ($editing->id ?? 0)); ?>">
                         <?php wp_nonce_field('htp_save_salon'); ?>
                         <div class="htp-form-grid">
-                            <label><span>Mã salon *</span><input name="code" required pattern="[A-Za-z0-9-]{2,50}" maxlength="50" value="<?php echo esc_attr($editing->code ?? ''); ?>" <?php disabled((bool) $editing); ?>></label>
+                            <label><span>Mã salon *</span><input name="code" required pattern="[A-Za-z0-9-]{2,50}" maxlength="50" value="<?php echo esc_attr($editing->code ?? ''); ?>" <?php disabled((bool) $editing); ?>><small>Ví dụ: PHU0001. Mã này là định danh duy nhất của salon.</small></label>
                             <?php if ($editing) : ?><input type="hidden" name="code" value="<?php echo esc_attr($editing->code); ?>"><?php endif; ?>
                             <label><span>Tên salon *</span><input name="name" required maxlength="190" value="<?php echo esc_attr($editing->name ?? ''); ?>"></label>
+                            <label><span>Chủ salon chính</span><select name="owner_user_id"><option value="0">— Chưa gán chủ salon —</option><?php foreach ($owner_users as $owner_user) : ?><option value="<?php echo esc_attr((string) $owner_user->ID); ?>" <?php selected(absint($editing->owner_user_id ?? 0), $owner_user->ID); ?>><?php echo esc_html($owner_user->display_name . ' (' . $owner_user->user_login . ')'); ?><?php echo get_user_meta($owner_user->ID, 'htp_disabled', true) ? ' — Đã khóa' : ''; ?></option><?php endforeach; ?></select><small>Khách gửi form từ landing của salon sẽ được ghi nhận thuộc salon này và chủ salon này tại thời điểm đăng ký.</small></label>
+                            <label><span>Người phụ trách/liên hệ</span><input name="manager_name" maxlength="190" value="<?php echo esc_attr($editing->manager_name ?? ''); ?>"></label>
                             <label><span>Điện thoại</span><input name="phone" inputmode="tel" maxlength="30" value="<?php echo esc_attr($editing->phone ?? ''); ?>"></label>
                             <label><span>Email</span><input name="email" type="email" maxlength="190" value="<?php echo esc_attr($editing->email ?? ''); ?>"></label>
-                            <label><span>Người phụ trách</span><input name="manager_name" maxlength="190" value="<?php echo esc_attr($editing->manager_name ?? ''); ?>"></label>
                             <label><span>Trạng thái</span><select name="status"><option value="active" <?php selected($editing->status ?? 'active', 'active'); ?>>Đang hoạt động</option><option value="inactive" <?php selected($editing->status ?? '', 'inactive'); ?>>Tạm ngừng</option></select></label>
                             <label class="htp-span-2"><span>Địa chỉ</span><textarea name="address" rows="3"><?php echo esc_textarea($editing->address ?? ''); ?></textarea></label>
                             <label class="htp-span-2"><span>Giới thiệu salon</span><textarea name="intro" rows="4"><?php echo esc_textarea($editing->intro ?? ''); ?></textarea></label>
@@ -62,10 +64,11 @@ final class HTP_Salons_Page
                 </section>
 
                 <section class="htp-panel htp-help-panel">
-                    <h2>Landing và QR</h2>
-                    <p>Mỗi salon có một landing riêng, ví dụ <code>domain.com/salon001/</code>. QR mở đúng landing này.</p>
-                    <p>Trong landing, khách chuyển qua lại giữa hai tab <strong>Hiến tóc</strong> và <strong>Thành viên</strong>.</p>
-                    <p>Bấm <strong>Tạo trang mặc định</strong> để plugin tạo sẵn trang có shortcode. Sau đó có thể sửa trang bằng Gutenberg hoặc page builder.</p>
+                    <h2>Salon, chủ salon và khách hàng</h2>
+                    <p>Mỗi salon có một mã duy nhất, ví dụ <code>PHU0001</code>, và một landing riêng.</p>
+                    <p>Khi khách gửi form trên landing đó, hệ thống lưu trực tiếp <strong>salon ID</strong>, mã salon và <strong>chủ salon tại thời điểm đăng ký</strong>.</p>
+                    <p>Chủ salon chính được tự động cấp quyền truy cập salon. Nhân viên khác vẫn có thể được phân công thêm tại menu <strong>Tài khoản</strong>.</p>
+                    <p>Bấm <strong>Tạo trang mặc định</strong> để plugin tạo sẵn trang có shortcode; sau đó có thể sửa bằng Gutenberg hoặc page builder.</p>
                 </section>
             </div>
 
@@ -73,9 +76,9 @@ final class HTP_Salons_Page
                 <h2>Danh sách salon</h2>
                 <div class="htp-table-wrap">
                     <table class="widefat striped htp-responsive-table">
-                        <thead><tr><th>Mã</th><th>Salon</th><th>Landing & QR</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                        <thead><tr><th>Mã</th><th>Salon</th><th>Chủ salon chính</th><th>Landing & QR</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
                         <tbody>
-                        <?php if (!$salons) : ?><tr><td colspan="5">Chưa có salon.</td></tr><?php else : foreach ($salons as $salon) :
+                        <?php if (!$salons) : ?><tr><td colspan="6">Chưa có salon.</td></tr><?php else : foreach ($salons as $salon) :
                             $url = HTP_QR_Service::registration_url($salon);
                             $has_page = absint($salon->landing_page_id ?? 0) && get_post((int) $salon->landing_page_id);
                             $qr_url = HTP_QR_Service::image_url($url, 280);
@@ -86,6 +89,7 @@ final class HTP_Salons_Page
                             <tr>
                                 <td data-label="Mã"><strong><?php echo esc_html($salon->code); ?></strong></td>
                                 <td data-label="Salon"><strong><?php echo esc_html($salon->name); ?></strong><br><small><?php echo esc_html($salon->address); ?></small><br><small><?php echo esc_html($salon->phone); ?></small></td>
+                                <td data-label="Chủ salon"><?php if ($salon->owner_name) : ?><strong><?php echo esc_html($salon->owner_name); ?></strong><br><small><?php echo esc_html($salon->owner_email); ?></small><?php else : ?><em>Chưa gán</em><?php endif; ?></td>
                                 <td data-label="Landing & QR">
                                     <?php if ($has_page) : ?>
                                         <input class="htp-copy-source" type="text" readonly value="<?php echo esc_attr($url); ?>">
@@ -137,7 +141,7 @@ final class HTP_Salons_Page
             }
             $page_id = absint($data['landing_page_id'] ?? 0);
             (new HTP_Landing_Service())->attach_page($id, $page_id);
-            HTP_Activity_Logger::log('salon_saved', 'salon', $id);
+            HTP_Activity_Logger::log('salon_saved', 'salon', $id, ['owner_user_id' => absint($data['owner_user_id'] ?? 0)]);
         } catch (Throwable $exception) {
             wp_die(esc_html($exception->getMessage()));
         }
