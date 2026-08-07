@@ -77,16 +77,18 @@ final class HTP_Submissions_Page
             </form>
 
             <section class="htp-panel">
-                <p><strong><?php echo esc_html(number_format_i18n($total)); ?></strong> kết quả.</p>
+                <p><strong><?php echo esc_html(number_format_i18n($total)); ?></strong> kết quả. Mỗi bản ghi được gắn cố định với salon và chủ salon tại thời điểm khách gửi form.</p>
                 <div class="htp-table-wrap">
                     <table class="widefat striped htp-responsive-table">
-                        <thead><tr><th>Mã</th><th>Khách hàng</th><th>Salon</th><th>Ngày đăng ký</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                        <thead><tr><th>Mã</th><th>Khách hàng</th><th>Salon / Chủ salon</th><th>Ngày đăng ký</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
                         <tbody>
-                        <?php if (!$rows) : ?><tr><td colspan="6">Không có dữ liệu.</td></tr><?php else : foreach ($rows as $row) : ?>
+                        <?php if (!$rows) : ?><tr><td colspan="6">Không có dữ liệu.</td></tr><?php else : foreach ($rows as $row) :
+                            $owner = HTP_Owner_Service::owner_for_submission($row);
+                            ?>
                             <tr>
                                 <td data-label="Mã"><strong><?php echo esc_html($row->submission_code); ?></strong></td>
                                 <td data-label="Khách hàng"><strong><?php echo esc_html($row->full_name); ?></strong><br><a href="tel:<?php echo esc_attr(preg_replace('/[^0-9+]/', '', $row->phone)); ?>"><?php echo esc_html($row->phone); ?></a><?php if ($row->email) : ?><br><small><?php echo esc_html($row->email); ?></small><?php endif; ?></td>
-                                <td data-label="Salon"><?php echo esc_html($row->salon_code . ' - ' . $row->salon_name); ?></td>
+                                <td data-label="Salon / Chủ"><strong><?php echo esc_html($row->salon_code . ' - ' . $row->salon_name); ?></strong><br><small>Chủ salon: <?php echo esc_html($owner ? $owner->display_name : 'Chưa gán'); ?></small></td>
                                 <td data-label="Ngày đăng ký"><?php echo esc_html(mysql2date('d/m/Y H:i', $row->created_at)); ?></td>
                                 <td data-label="Trạng thái"><span class="htp-status-badge htp-status-<?php echo esc_attr($row->status); ?>"><?php echo esc_html($labels[$row->status] ?? $row->status); ?></span></td>
                                 <td data-label="Thao tác"><a class="button" href="<?php echo esc_url(add_query_arg(['page' => $page_slug, 'submission_id' => $row->id], admin_url('admin.php'))); ?>">Xem</a></td>
@@ -112,6 +114,7 @@ final class HTP_Submissions_Page
         $logs = $repository->status_logs($id);
         $fields = (new HTP_Form_Repository())->fields((int) $submission->form_id);
         $labels = HTP_Submission_Service::status_labels($form_key);
+        $owner = HTP_Owner_Service::owner_for_submission($submission);
         $back_url = admin_url('admin.php?page=' . $page_slug);
         ?>
         <div class="wrap htp-admin-wrap">
@@ -124,7 +127,8 @@ final class HTP_Submissions_Page
                         <dt>Số điện thoại</dt><dd><?php echo esc_html($submission->phone); ?></dd>
                         <dt>Email</dt><dd><?php echo esc_html($submission->email ?: '—'); ?></dd>
                         <dt>Ngày sinh</dt><dd><?php echo esc_html($submission->date_of_birth ? mysql2date('d/m/Y', $submission->date_of_birth) : '—'); ?></dd>
-                        <dt>Salon</dt><dd><?php echo esc_html($submission->salon_code . ' - ' . $submission->salon_name); ?></dd>
+                        <dt>Salon</dt><dd><strong><?php echo esc_html($submission->salon_code . ' - ' . $submission->salon_name); ?></strong></dd>
+                        <dt>Chủ salon lúc đăng ký</dt><dd><?php echo esc_html($owner ? $owner->display_name : 'Chưa gán'); ?><?php if ($owner) : ?><br><small><?php echo esc_html($owner->user_email); ?></small><?php endif; ?></dd>
                         <dt>Ngày tạo</dt><dd><?php echo esc_html(mysql2date('d/m/Y H:i', $submission->created_at)); ?></dd>
                         <?php foreach ($fields as $field) :
                             if (in_array($field->field_key, ['full_name', 'phone', 'email', 'date_of_birth', 'consent'], true) || in_array($field->field_type, ['image', 'images'], true)) {
@@ -212,7 +216,7 @@ final class HTP_Submissions_Page
         $all_files = $repository->bulk_files($ids);
         $labels = HTP_Submission_Service::status_labels($form_key);
 
-        $headers = ['Mã', 'Salon', 'Họ và tên', 'Số điện thoại', 'Email', 'Ngày sinh', 'Trạng thái', 'Ngày đăng ký'];
+        $headers = ['Mã', 'Mã salon', 'Tên salon', 'Chủ salon lúc đăng ký', 'Email chủ salon', 'Họ và tên', 'Số điện thoại', 'Email', 'Ngày sinh', 'Trạng thái', 'Ngày đăng ký'];
         $extra_fields = [];
         foreach ($fields as $field) {
             if (in_array($field->field_key, ['full_name', 'phone', 'email', 'date_of_birth', 'consent'], true)) {
@@ -223,9 +227,13 @@ final class HTP_Submissions_Page
         }
         $rows = [$headers];
         foreach ($base_rows as $row) {
+            $owner = HTP_Owner_Service::owner_for_submission($row);
             $line = [
                 $row['submission_code'],
-                $row['salon_code'] . ' - ' . $row['salon_name'],
+                $row['salon_code'],
+                $row['salon_name'],
+                $owner ? $owner->display_name : 'Chưa gán',
+                $owner ? $owner->user_email : '',
                 $row['full_name'],
                 $row['phone'],
                 $row['email'],
