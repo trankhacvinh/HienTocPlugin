@@ -49,6 +49,7 @@ foreach ($tables as $table) {
 
 $options = [
     'htp_db_version',
+    'htp_owner_schema_version',
     'htp_legacy_migrated_v2',
     'htp_registration_page_id',
     'htp_lookup_page_id',
