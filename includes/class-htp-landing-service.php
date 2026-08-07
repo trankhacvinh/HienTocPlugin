@@ -72,6 +72,8 @@ final class HTP_Landing_Service
 
     public function resolve_salon(array $atts = []): ?object
     {
+        global $wpdb;
+
         $repository = new HTP_Salon_Repository();
         $code = isset($atts['salon']) ? sanitize_text_field((string) $atts['salon']) : '';
         if ($code === '' && isset($_GET['salon'])) {
@@ -84,6 +86,15 @@ final class HTP_Landing_Service
         $post_id = get_queried_object_id();
         if ($post_id) {
             $salon_id = absint(get_post_meta($post_id, '_htp_salon_id', true));
+            if (!$salon_id) {
+                $salon_id = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$wpdb->prefix}htp_salons WHERE landing_page_id = %d LIMIT 1",
+                    $post_id
+                ));
+                if ($salon_id) {
+                    update_post_meta($post_id, '_htp_salon_id', $salon_id);
+                }
+            }
             if ($salon_id) {
                 $salon = $repository->find_by_id($salon_id);
                 return $salon && $salon->status === 'active' ? $salon : null;
