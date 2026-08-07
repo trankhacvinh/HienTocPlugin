@@ -7,12 +7,14 @@ final class HTP_Google_Sheets_Service
     private const CRON_HOOK = 'htp_google_sheets_process_queue';
     private const CRON_SCHEDULE = 'htp_every_five_minutes';
     private const MAX_ATTEMPTS = 12;
+    private const SCHEMA_VERSION = '1.0.0';
 
     public static function init(): void
     {
+        self::maybe_create_queue_table();
         add_filter('cron_schedules', [self::class, 'cron_schedules']);
         add_action(self::CRON_HOOK, [self::class, 'process_queue']);
-        add_action('htp_submission_saved', [self::class, 'queue_submission'], 10, 2);
+        add_action('htp_activity_logged', [self::class, 'handle_activity'], 10, 5);
 
         if (self::enabled()) {
             self::ensure_cron();
@@ -24,6 +26,18 @@ final class HTP_Google_Sheets_Service
     public static function deactivate(): void
     {
         self::clear_cron();
+    }
+
+    public static function handle_activity(string $action, ?string $entity_type, ?int $entity_id, array $details = [], ?int $user_id = null): void
+    {
+        if ($entity_type !== 'submission' || !$entity_id) {
+            return;
+        }
+        if ($action === 'submission_created') {
+            self::queue_submission($entity_id, 'created');
+        } elseif ($action === 'submission_status_updated') {
+            self::queue_submission($entity_id, 'updated');
+        }
     }
 
     public static function cron_schedules(array $schedules): array
@@ -117,6 +131,21 @@ final class HTP_Google_Sheets_Service
         return (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
     }
 
+    public static function recent_errors(int $limit = 5): array
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'htp_sync_queue';
+        $limit = max(1, min(20, $limit));
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT q.*, s.submission_code
+             FROM {$table} q
+             LEFT JOIN {$wpdb->prefix}htp_submissions s ON s.id = q.submission_id
+             WHERE q.last_error <> ''
+             ORDER BY q.updated_at DESC LIMIT %d",
+            $limit
+        )) ?: [];
+    }
+
     public static function process_queue(int $limit = 20): array
     {
         if (!self::enabled()) {
@@ -145,10 +174,10 @@ final class HTP_Google_Sheets_Service
             } catch (Throwable $exception) {
                 $attempts = (int) $row->attempts + 1;
                 $delay_minutes = min(360, (int) pow(2, min(8, $attempts)));
-                $available = gmdate('Y-m-d H:i:s', current_time('timestamp', true) + ($delay_minutes * MINUTE_IN_SECONDS));
+                $available_gmt = gmdate('Y-m-d H:i:s', current_time('timestamp', true) + ($delay_minutes * MINUTE_IN_SECONDS));
                 $wpdb->update($table, [
                     'attempts' => $attempts,
-                    'available_at' => get_date_from_gmt($available),
+                    'available_at' => get_date_from_gmt($available_gmt),
                     'last_error' => mb_substr($exception->getMessage(), 0, 1000),
                     'updated_at' => current_time('mysql'),
                 ], ['id' => (int) $row->id]);
@@ -209,8 +238,7 @@ final class HTP_Google_Sheets_Service
 
     private static function post_payload(array $payload, int $timeout): array
     {
-        $secret = trim((string) get_option('htp_google_sheets_secret', ''));
-        $payload['secret'] = $secret;
+        $payload['secret'] = trim((string) get_option('htp_google_sheets_secret', ''));
         $payload['sheet_tabs'] = [
             'donation' => (string) get_option('htp_google_sheets_donation_tab', 'Hien toc'),
             'member' => (string) get_option('htp_google_sheets_member_tab', 'Thanh vien'),
@@ -287,5 +315,32 @@ final class HTP_Google_Sheets_Service
                 'fields' => $flat,
             ],
         ];
+    }
+
+    private static function maybe_create_queue_table(): void
+    {
+        if ((string) get_option('htp_google_sheets_schema_version', '') === self::SCHEMA_VERSION) {
+            return;
+        }
+
+        global $wpdb;
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        $table = $wpdb->prefix . 'htp_sync_queue';
+        $charset = $wpdb->get_charset_collate();
+        dbDelta("CREATE TABLE {$table} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            submission_id BIGINT UNSIGNED NOT NULL,
+            event_key VARCHAR(40) NOT NULL DEFAULT 'updated',
+            attempts INT UNSIGNED NOT NULL DEFAULT 0,
+            available_at DATETIME NOT NULL,
+            last_error TEXT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY submission_id (submission_id),
+            KEY available_at (available_at),
+            KEY attempts (attempts)
+        ) {$charset};");
+        update_option('htp_google_sheets_schema_version', self::SCHEMA_VERSION);
     }
 }
