@@ -103,6 +103,8 @@ final class HTP_Admin
             'status' => ['success', 'Đã cập nhật trạng thái.'],
             'page_created' => ['success', 'Đã tạo trang landing mặc định cho salon.'],
             'permalink' => ['success', 'Đã cập nhật cấu trúc đường dẫn. Hãy mở thử một trang salon để kiểm tra.'],
+            'backup_imported' => ['success', 'Đã khôi phục dữ liệu MyHair từ bản sao lưu.'],
+            'backup_deleted' => ['success', 'Đã xóa file backup trên máy chủ.'],
             'error' => ['error', 'Không thể thực hiện thao tác. Vui lòng thử lại.'],
         ];
         if (isset($messages[$message])) {
