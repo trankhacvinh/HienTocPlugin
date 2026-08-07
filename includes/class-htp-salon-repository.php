@@ -15,7 +15,13 @@ final class HTP_Salon_Repository
     public function find_by_id(int $id): ?object
     {
         global $wpdb;
-        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table} WHERE id = %d LIMIT 1", $id));
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT s.*, u.display_name owner_name, u.user_email owner_email
+             FROM {$this->table} s
+             LEFT JOIN {$wpdb->users} u ON u.ID = s.owner_user_id
+             WHERE s.id = %d LIMIT 1",
+            $id
+        ));
         return $row ?: null;
     }
 
@@ -23,9 +29,12 @@ final class HTP_Salon_Repository
     {
         global $wpdb;
         $code = strtoupper(trim($code));
-        $sql = "SELECT * FROM {$this->table} WHERE code = %s";
+        $sql = "SELECT s.*, u.display_name owner_name, u.user_email owner_email
+                FROM {$this->table} s
+                LEFT JOIN {$wpdb->users} u ON u.ID = s.owner_user_id
+                WHERE s.code = %s";
         if ($active_only) {
-            $sql .= " AND status = 'active'";
+            $sql .= " AND s.status = 'active'";
         }
         $sql .= ' LIMIT 1';
         $row = $wpdb->get_row($wpdb->prepare($sql, $code));
@@ -48,18 +57,20 @@ final class HTP_Salon_Repository
             if (!$ids) {
                 return [];
             }
-            $where[] = 'id IN (' . implode(',', array_fill(0, count($ids), '%d')) . ')';
+            $where[] = 's.id IN (' . implode(',', array_fill(0, count($ids), '%d')) . ')';
             $params = array_merge($params, $ids);
         }
         if ($active_only) {
-            $where[] = "status = 'active'";
+            $where[] = "s.status = 'active'";
         }
 
-        $sql = "SELECT * FROM {$this->table}";
+        $sql = "SELECT s.*, u.display_name owner_name, u.user_email owner_email
+                FROM {$this->table} s
+                LEFT JOIN {$wpdb->users} u ON u.ID = s.owner_user_id";
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
-        $sql .= ' ORDER BY name ASC';
+        $sql .= ' ORDER BY s.name ASC';
         if ($params) {
             $sql = $wpdb->prepare($sql, ...$params);
         }
@@ -79,7 +90,10 @@ final class HTP_Salon_Repository
         if ($result === false) {
             throw new RuntimeException('Không thể tạo salon. Mã salon có thể đã tồn tại.');
         }
-        return (int) $wpdb->insert_id;
+
+        $salon_id = (int) $wpdb->insert_id;
+        HTP_Owner_Service::synchronize_assignment($salon_id, absint($payload['owner_user_id'] ?? 0));
+        return $salon_id;
     }
 
     public function update(int $id, array $data): void
@@ -91,6 +105,8 @@ final class HTP_Salon_Repository
         if ($result === false) {
             throw new RuntimeException('Không thể cập nhật salon.');
         }
+
+        HTP_Owner_Service::synchronize_assignment($id, absint($payload['owner_user_id'] ?? 0));
     }
 
     public function set_landing_page(int $id, int $page_id): void
@@ -133,6 +149,8 @@ final class HTP_Salon_Repository
             throw new InvalidArgumentException('Vui lòng nhập tên salon.');
         }
 
+        $owner_user_id = HTP_Owner_Service::validate_owner_user_id(absint($data['owner_user_id'] ?? 0));
+
         return [
             'code' => $code,
             'name' => $name,
@@ -140,6 +158,7 @@ final class HTP_Salon_Repository
             'phone' => sanitize_text_field((string) ($data['phone'] ?? '')),
             'email' => sanitize_email((string) ($data['email'] ?? '')),
             'manager_name' => sanitize_text_field((string) ($data['manager_name'] ?? '')),
+            'owner_user_id' => $owner_user_id ?: null,
             'intro' => wp_kses_post((string) ($data['intro'] ?? '')),
             'instruction' => wp_kses_post((string) ($data['instruction'] ?? '')),
             'opening_hours' => sanitize_textarea_field((string) ($data['opening_hours'] ?? '')),
