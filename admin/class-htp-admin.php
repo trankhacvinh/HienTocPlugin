@@ -105,6 +105,9 @@ final class HTP_Admin
             'permalink' => ['success', 'Đã cập nhật cấu trúc đường dẫn. Hãy mở thử một trang salon để kiểm tra.'],
             'backup_imported' => ['success', 'Đã khôi phục dữ liệu MyHair từ bản sao lưu.'],
             'backup_deleted' => ['success', 'Đã xóa file backup trên máy chủ.'],
+            'google_test_ok' => ['success', 'Kết nối Google Sheets thành công.'],
+            'google_queued' => ['success', 'Đã đưa toàn bộ dữ liệu hiện có vào hàng đợi Google Sheets và bắt đầu đồng bộ.'],
+            'google_processed' => ['success', 'Đã chạy xử lý hàng đợi Google Sheets ngay bây giờ.'],
             'error' => ['error', 'Không thể thực hiện thao tác. Vui lòng thử lại.'],
         ];
         if (isset($messages[$message])) {
