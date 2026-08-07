@@ -2,14 +2,14 @@
 Contributors: HienTocPlugin
 Requires at least: 6.4
 Requires PHP: 8.1
-Stable tag: 2.1.0
+Stable tag: 2.2.0
 License: GPLv2 or later
 
 Plugin quản lý landing salon, đăng ký hiến tóc và thành viên MyHair.
 
 == Description ==
 
-Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ landing được gắn với salon và lưu chủ salon tại thời điểm đăng ký. Landing chứa hai tab form hiến tóc/thành viên, form cấu hình được, hỗ trợ ảnh, phân trang, xuất Excel và sao lưu/khôi phục toàn bộ dữ liệu.
+Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ landing được gắn với salon và lưu chủ salon tại thời điểm đăng ký. Landing chứa hai tab form hiến tóc/thành viên, form cấu hình được, hỗ trợ ảnh, phân trang, xuất Excel, sao lưu/khôi phục và đồng bộ Google Sheets.
 
 == Installation ==
 
@@ -18,9 +18,20 @@ Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ l
 3. Tạo tài khoản chủ salon.
 4. Tạo salon, gán chủ salon và tạo trang landing mặc định.
 5. Cấu hình form và URL OA.
-6. Trước khi xóa/cài lại plugin, vào MyHair > Cài đặt > Sao lưu & khôi phục để tải file .htpbackup.
+6. Nếu cần Google Sheets, vào MyHair > Cài đặt > Đồng bộ Google Sheets và làm theo hướng dẫn Apps Script.
+7. Trước khi xóa/cài lại plugin, vào MyHair > Cài đặt > Sao lưu & khôi phục để tải file .htpbackup.
 
 == Changelog ==
+
+= 2.2.0 =
+* Thêm cấu hình đồng bộ Google Sheets bằng Google Apps Script Web App.
+* Tự đồng bộ đăng ký mới và thay đổi trạng thái.
+* Tách dữ liệu hiến tóc/thành viên ra hai sheet có tên cấu hình được.
+* Dùng mã đăng ký để upsert nên đồng bộ lại không tạo dòng trùng.
+* Có hàng đợi bền vững trong database và tự thử lại khi Google tạm lỗi.
+* Có nút kiểm tra kết nối, đồng bộ hàng đợi ngay và đồng bộ lại toàn bộ dữ liệu cũ.
+* Gửi cả mã salon, tên salon, chủ salon, thông tin khách, trường tùy chỉnh và URL ảnh.
+* Thêm Apps Script mẫu trong thư mục docs.
 
 = 2.1.0 =
 * Thêm xuất backup đầy đủ dạng .htpbackup.
