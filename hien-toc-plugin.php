@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hiến Tóc Plugin
  * Description: Quản lý landing salon, đăng ký hiến tóc và đăng ký thành viên.
- * Version: 2.1.0
+ * Version: 2.2.0
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: HienTocPlugin
@@ -11,7 +11,7 @@
 
 defined('ABSPATH') || exit;
 
-define('HTP_VERSION', '2.1.0');
+define('HTP_VERSION', '2.2.0');
 define('HTP_DB_VERSION', '2.0.2');
 define('HTP_FILE', __FILE__);
 define('HTP_PATH', plugin_dir_path(__FILE__));
@@ -24,6 +24,7 @@ $htp_files = [
     'includes/class-htp-user-salon-service.php',
     'includes/class-htp-owner-service.php',
     'includes/class-htp-backup-service.php',
+    'includes/class-htp-google-sheets-service.php',
     'includes/class-htp-salon-repository.php',
     'includes/class-htp-form-repository.php',
     'includes/class-htp-submission-repository.php',
@@ -48,7 +49,10 @@ foreach ($htp_files as $htp_file) {
 }
 
 register_activation_hook(__FILE__, ['HTP_Installer', 'activate']);
-register_deactivation_hook(__FILE__, ['HTP_Installer', 'deactivate']);
+register_deactivation_hook(__FILE__, static function (): void {
+    HTP_Google_Sheets_Service::deactivate();
+    HTP_Installer::deactivate();
+});
 
 add_action('plugins_loaded', static function (): void {
     load_plugin_textdomain('hien-toc-plugin', false, dirname(plugin_basename(__FILE__)) . '/languages');
@@ -56,6 +60,7 @@ add_action('plugins_loaded', static function (): void {
     HTP_Legacy_Migrator::maybe_migrate();
     HTP_User_Salon_Service::init();
     HTP_Owner_Service::init();
+    HTP_Google_Sheets_Service::init();
     HTP_Shortcodes::init();
 
     if (is_admin()) {
