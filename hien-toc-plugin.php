@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hiến Tóc Plugin
  * Description: Quản lý landing salon, đăng ký hiến tóc và đăng ký thành viên.
- * Version: 2.0.1
+ * Version: 2.0.2
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: HienTocPlugin
@@ -11,8 +11,8 @@
 
 defined('ABSPATH') || exit;
 
-define('HTP_VERSION', '2.0.1');
-define('HTP_DB_VERSION', '2.0.1');
+define('HTP_VERSION', '2.0.2');
+define('HTP_DB_VERSION', '2.0.2');
 define('HTP_FILE', __FILE__);
 define('HTP_PATH', plugin_dir_path(__FILE__));
 define('HTP_URL', plugin_dir_url(__FILE__));
@@ -22,6 +22,7 @@ $htp_files = [
     'includes/class-htp-legacy-migrator.php',
     'includes/class-htp-activity-logger.php',
     'includes/class-htp-user-salon-service.php',
+    'includes/class-htp-owner-service.php',
     'includes/class-htp-salon-repository.php',
     'includes/class-htp-form-repository.php',
     'includes/class-htp-submission-repository.php',
@@ -53,6 +54,7 @@ add_action('plugins_loaded', static function (): void {
     HTP_Installer::maybe_upgrade();
     HTP_Legacy_Migrator::maybe_migrate();
     HTP_User_Salon_Service::init();
+    HTP_Owner_Service::init();
     HTP_Shortcodes::init();
 
     if (is_admin()) {
