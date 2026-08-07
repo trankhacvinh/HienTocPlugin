@@ -10,7 +10,8 @@ final class HTP_Owner_Service
     {
         self::maybe_upgrade();
 
-        $is_public_submission = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['htp_form_submit']);
+        $request_method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : '';
+        $is_public_submission = $request_method === 'POST' && isset($_POST['htp_form_submit']);
         $admin_action = isset($_REQUEST['action']) ? sanitize_key(wp_unslash($_REQUEST['action'])) : '';
         $is_owner_related_admin_action = in_array($admin_action, ['htp_save_salon', 'htp_save_user'], true);
 
@@ -112,9 +113,7 @@ final class HTP_Owner_Service
 
         if ($snapshot_id) {
             $snapshot_owner = get_user_by('id', $snapshot_id);
-            if ($snapshot_owner instanceof WP_User) {
-                return $snapshot_owner;
-            }
+            return $snapshot_owner instanceof WP_User ? $snapshot_owner : null;
         }
 
         if (!$salon) {
