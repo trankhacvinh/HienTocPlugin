@@ -2,7 +2,7 @@
 Contributors: HienTocPlugin
 Requires at least: 6.4
 Requires PHP: 8.1
-Stable tag: 2.0.2
+Stable tag: 2.0.3
 License: GPLv2 or later
 
 Plugin quản lý landing salon, đăng ký hiến tóc và thành viên MyHair.
@@ -20,6 +20,11 @@ Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ l
 5. Cấu hình form và URL OA.
 
 == Changelog ==
+
+= 2.0.3 =
+* Ngày sinh hiển thị và nhập theo chuẩn Việt Nam dd/mm/yyyy.
+* Vẫn hỗ trợ chọn ngày bằng lịch của trình duyệt/điện thoại.
+* Cố định giao diện checkbox/radio để không bị theme WordPress làm phóng to hoặc biến dạng.
 
 = 2.0.2 =
 * Gán chủ salon chính bằng tài khoản MyHair.
