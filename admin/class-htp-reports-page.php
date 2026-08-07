@@ -26,6 +26,12 @@ final class HTP_Reports_Page
             'to' => sanitize_text_field(wp_unslash($_GET['to'] ?? '')),
         ];
         $rows = (new HTP_Submission_Repository())->report_by_salon($filters, $allowed);
+        $salon_ids = array_map(static fn(object $row): int => (int) $row->id, $rows);
+        $salon_map = [];
+        foreach ((new HTP_Salon_Repository())->all($salon_ids) as $salon) {
+            $salon_map[(int) $salon->id] = $salon;
+        }
+
         $visits_table = $wpdb->prefix . 'htp_qr_visits';
         $salons_table = $wpdb->prefix . 'htp_salons';
         $where = [];
@@ -54,7 +60,7 @@ final class HTP_Reports_Page
         $visit_rows = $params ? $wpdb->get_results($wpdb->prepare($sql, ...$params), OBJECT_K) : $wpdb->get_results($sql, OBJECT_K);
         ?>
         <div class="wrap htp-admin-wrap">
-            <h1>Báo cáo</h1>
+            <h1>Báo cáo theo salon và chủ salon</h1>
             <form method="get" class="htp-panel htp-filter-form">
                 <input type="hidden" name="page" value="htp-reports">
                 <label>Từ ngày <input type="date" name="from" value="<?php echo esc_attr($filters['from']); ?>"></label>
@@ -64,16 +70,18 @@ final class HTP_Reports_Page
             <section class="htp-panel">
                 <div class="htp-table-wrap">
                     <table class="widefat striped htp-responsive-table">
-                        <thead><tr><th>Salon</th><th>Lượt mở landing</th><th>Mobile</th><th>Hiến tóc</th><th>Hoàn thành</th><th>Thành viên</th><th>Thành viên hoạt động</th><th>Tỷ lệ chuyển đổi</th></tr></thead>
+                        <thead><tr><th>Salon</th><th>Chủ salon chính</th><th>Lượt mở landing</th><th>Mobile</th><th>Hiến tóc</th><th>Hoàn thành</th><th>Thành viên</th><th>Thành viên hoạt động</th><th>Tỷ lệ chuyển đổi</th></tr></thead>
                         <tbody>
-                        <?php if (!$rows) : ?><tr><td colspan="8">Không có dữ liệu.</td></tr><?php else : foreach ($rows as $row) :
+                        <?php if (!$rows) : ?><tr><td colspan="9">Không có dữ liệu.</td></tr><?php else : foreach ($rows as $row) :
                             $visit = $visit_rows[$row->id] ?? null;
+                            $salon = $salon_map[(int) $row->id] ?? null;
                             $visits = (int) ($visit->visits ?? 0);
                             $converted = (int) ($visit->converted ?? 0);
                             $rate = $visits > 0 ? round($converted * 100 / $visits, 1) : 0;
                             ?>
                             <tr>
                                 <td data-label="Salon"><strong><?php echo esc_html($row->code); ?></strong><br><?php echo esc_html($row->name); ?></td>
+                                <td data-label="Chủ salon"><?php if ($salon && $salon->owner_name) : ?><strong><?php echo esc_html($salon->owner_name); ?></strong><br><small><?php echo esc_html($salon->owner_email); ?></small><?php else : ?><em>Chưa gán</em><?php endif; ?></td>
                                 <td data-label="Lượt mở"><?php echo esc_html(number_format_i18n($visits)); ?></td>
                                 <td data-label="Mobile"><?php echo esc_html(number_format_i18n((int) ($visit->mobile_visits ?? 0))); ?></td>
                                 <td data-label="Hiến tóc"><?php echo esc_html(number_format_i18n((int) $row->donation_count)); ?></td>
