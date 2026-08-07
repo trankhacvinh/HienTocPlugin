@@ -4,6 +4,18 @@ defined('WP_UNINSTALL_PLUGIN') || exit;
 
 global $wpdb;
 
+// Tạo một bản sao lưu an toàn trước khi xóa dữ liệu plugin.
+// File được giữ lại trong wp-content/htp-backups để có thể khôi phục sau khi cài lại plugin.
+$backup_service = __DIR__ . '/includes/class-htp-backup-service.php';
+if (is_file($backup_service)) {
+    require_once $backup_service;
+    if (class_exists('HTP_Backup_Service')) {
+        HTP_Backup_Service::create_server_backup('auto-before-uninstall');
+    }
+}
+
+wp_clear_scheduled_hook('htp_google_sheets_process_queue');
+
 $attachment_ids = get_posts([
     'post_type' => 'attachment',
     'post_status' => 'any',
@@ -30,6 +42,7 @@ foreach ($created_page_ids as $page_id) {
 $wpdb->delete($wpdb->postmeta, ['meta_key' => '_htp_salon_id']);
 
 $tables = [
+    $wpdb->prefix . 'htp_sync_queue',
     $wpdb->prefix . 'htp_submission_logs',
     $wpdb->prefix . 'htp_submission_files',
     $wpdb->prefix . 'htp_submission_values',
@@ -50,6 +63,7 @@ foreach ($tables as $table) {
 $options = [
     'htp_db_version',
     'htp_owner_schema_version',
+    'htp_google_sheets_schema_version',
     'htp_legacy_migrated_v2',
     'htp_registration_page_id',
     'htp_lookup_page_id',
@@ -66,6 +80,13 @@ $options = [
     'htp_enable_address',
     'htp_enable_customer_note',
     'htp_success_text',
+    'htp_google_sheets_enabled',
+    'htp_google_sheets_webhook_url',
+    'htp_google_sheets_secret',
+    'htp_google_sheets_donation_tab',
+    'htp_google_sheets_member_tab',
+    'htp_google_sheets_last_sync_at',
+    'htp_google_sheets_last_sync_summary',
 ];
 foreach ($options as $option) {
     delete_option($option);

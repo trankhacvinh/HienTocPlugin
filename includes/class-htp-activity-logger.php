@@ -8,15 +8,21 @@ final class HTP_Activity_Logger
     {
         global $wpdb;
 
+        $sanitized_action = sanitize_key($action);
+        $sanitized_entity_type = $entity_type ? sanitize_key($entity_type) : null;
+        $resolved_user_id = $user_id ?? (get_current_user_id() ?: null);
+
         $wpdb->insert($wpdb->prefix . 'htp_activity_logs', [
-            'user_id' => $user_id ?? (get_current_user_id() ?: null),
-            'action' => sanitize_key($action),
-            'entity_type' => $entity_type ? sanitize_key($entity_type) : null,
+            'user_id' => $resolved_user_id,
+            'action' => $sanitized_action,
+            'entity_type' => $sanitized_entity_type,
             'entity_id' => $entity_id,
             'details' => $details ? wp_json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
             'ip_address' => self::ip_address(),
             'created_at' => current_time('mysql'),
         ]);
+
+        do_action('htp_activity_logged', $sanitized_action, $sanitized_entity_type, $entity_id, $details, $resolved_user_id);
     }
 
     public static function recent(int $limit = 100): array
