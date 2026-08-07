@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hiến Tóc Plugin
  * Description: Quản lý landing salon, đăng ký hiến tóc và đăng ký thành viên.
- * Version: 2.2.1
+ * Version: 2.2.2
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: HienTocPlugin
@@ -11,7 +11,7 @@
 
 defined('ABSPATH') || exit;
 
-define('HTP_VERSION', '2.2.1');
+define('HTP_VERSION', '2.2.2');
 define('HTP_DB_VERSION', '2.0.2');
 define('HTP_FILE', __FILE__);
 define('HTP_PATH', plugin_dir_path(__FILE__));
@@ -98,6 +98,12 @@ add_action('wp_enqueue_scripts', static function (): void {
     foreach ($shortcodes as $shortcode) {
         if (has_shortcode($post->post_content, $shortcode)) {
             wp_enqueue_style('htp-public', HTP_URL . 'assets/css/public.css', [], HTP_VERSION);
+
+            if ($shortcode === 'htp_salon_landing') {
+                wp_enqueue_style('htp-landing-premium', HTP_URL . 'assets/css/landing-premium.css', ['htp-public'], HTP_VERSION);
+                wp_enqueue_style('htp-landing-compat', HTP_URL . 'assets/css/landing-compat.css', ['htp-landing-premium'], HTP_VERSION);
+            }
+
             wp_enqueue_script('htp-public', HTP_URL . 'assets/js/public.js', [], HTP_VERSION, true);
             wp_localize_script('htp-public', 'HTPPublic', [
                 'submitting' => 'Đang gửi...',
