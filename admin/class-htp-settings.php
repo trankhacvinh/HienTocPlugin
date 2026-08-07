@@ -8,6 +8,7 @@ final class HTP_Settings
     {
         add_action('admin_menu', [self::class, 'register_page']);
         add_action('admin_init', [self::class, 'register_settings']);
+        add_action('admin_init', [self::class, 'repair_lookup_page'], 30);
         add_action('admin_post_htp_enable_pretty_permalinks', [self::class, 'enable_pretty_permalinks']);
         add_action('admin_post_htp_export_backup', [HTP_Backup_Service::class, 'export_download']);
         add_action('admin_post_htp_import_backup', [HTP_Backup_Service::class, 'import_uploaded']);
@@ -64,6 +65,7 @@ final class HTP_Settings
                         <div>
                             <h3>Nhập backup</h3>
                             <p><strong>Lưu ý:</strong> khôi phục sẽ thay thế toàn bộ dữ liệu MyHair hiện có bằng dữ liệu trong file backup. Tài khoản WordPress không bị xóa hoặc tạo mới.</p>
+                            <p class="description">Giới hạn upload hiện tại của máy chủ: <?php echo esc_html(size_format(wp_max_upload_size(), 2)); ?>.</p>
                             <form method="post" enctype="multipart/form-data" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" onsubmit="return confirm('Khôi phục sẽ thay thế toàn bộ dữ liệu MyHair hiện tại. Bạn chắc chắn muốn tiếp tục?');">
                                 <input type="hidden" name="action" value="htp_import_backup">
                                 <?php wp_nonce_field('htp_import_backup'); ?>
@@ -143,6 +145,38 @@ final class HTP_Settings
         flush_rewrite_rules(true);
         wp_safe_redirect(add_query_arg(['page' => 'htp-settings', 'htp_message' => 'permalink'], admin_url('admin.php')));
         exit;
+    }
+
+    public static function repair_lookup_page(): void
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $page_id = absint(get_option('htp_lookup_page_id', 0));
+        $page = $page_id ? get_post($page_id) : null;
+        if ($page instanceof WP_Post && $page->post_type === 'page') {
+            return;
+        }
+
+        $existing = get_page_by_path('tra-cuu-myhair', OBJECT, 'page');
+        if ($existing instanceof WP_Post) {
+            update_option('htp_lookup_page_id', (int) $existing->ID);
+            return;
+        }
+
+        $new_id = wp_insert_post([
+            'post_title' => 'Tra cứu đăng ký MyHair',
+            'post_name' => 'tra-cuu-myhair',
+            'post_content' => '[htp_registration_lookup]',
+            'post_status' => 'publish',
+            'post_type' => 'page',
+            'comment_status' => 'closed',
+        ]);
+        if (!is_wp_error($new_id) && $new_id) {
+            update_post_meta((int) $new_id, '_htp_created_page', 'lookup');
+            update_option('htp_lookup_page_id', (int) $new_id);
+        }
     }
 
     public static function sanitize_upload_mb(mixed $value): int
