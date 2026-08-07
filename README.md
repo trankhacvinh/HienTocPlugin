@@ -22,6 +22,32 @@ Plugin WordPress quản lý hệ thống MyHair theo salon.
 - Phân quyền theo salon, báo cáo theo salon/chủ salon, nhật ký hoạt động và tra cứu mã.
 - Có công cụ bật permalink `/%postname%/` để loại `index.php` khỏi URL khi máy chủ hỗ trợ rewrite.
 - Ngày sinh trên form public nhập theo chuẩn Việt Nam `dd/mm/yyyy`.
+- Có đồng bộ Google Sheets với hàng đợi và retry tự động.
+
+## Đồng bộ Google Sheets
+
+Trong **MyHair → Cài đặt → Đồng bộ Google Sheets**:
+
+- Kết nối bằng **Google Apps Script Web App**, không cần cài Google SDK trên hosting PHP.
+- Có cấu hình bật/tắt, Web App URL, Secret key và tên hai tab Google Sheet.
+- Đăng ký mới và thay đổi trạng thái tự được đưa vào hàng đợi đồng bộ.
+- Nếu Google lỗi hoặc mất mạng, dữ liệu chính vẫn lưu trong WordPress; hàng đợi tự thử lại tối đa nhiều lần với thời gian chờ tăng dần.
+- Có nút **Kiểm tra kết nối**, **Đồng bộ hàng đợi ngay** và **Đồng bộ lại toàn bộ dữ liệu**.
+- Apps Script dùng `submission_code` làm khóa upsert nên chạy lại không tạo dòng trùng.
+- Payload gồm mã salon, tên salon, chủ salon, thông tin khách, trạng thái, trường tùy chỉnh và URL ảnh.
+- Hai loại dữ liệu mặc định tách thành tab `Hien toc` và `Thanh vien`, có thể đổi tên trong cấu hình.
+
+Mã Apps Script mẫu nằm tại `docs/google-sheets-apps-script.gs`.
+
+### Thiết lập nhanh
+
+1. Mở Google Sheet muốn nhận dữ liệu.
+2. Vào **Extensions → Apps Script**.
+3. Dán nội dung `docs/google-sheets-apps-script.gs`.
+4. Đổi `MYHAIR_SECRET` thành một chuỗi bí mật và nhập đúng chuỗi đó trong WordPress.
+5. Deploy Apps Script thành **Web App** và lấy URL kết thúc bằng `/exec`.
+6. Dán URL vào **MyHair → Cài đặt → Đồng bộ Google Sheets**, lưu và bấm **Kiểm tra kết nối**.
+7. Nếu website đã có dữ liệu cũ, bấm **Đồng bộ lại toàn bộ dữ liệu** một lần.
 
 ## Sao lưu & khôi phục
 
@@ -44,7 +70,7 @@ Trong **MyHair → Cài đặt → Sao lưu & khôi phục**:
 4. Vào **MyHair → Tài khoản**, tạo tài khoản chủ salon.
 5. Vào **MyHair → Salon**, tạo salon, nhập mã như `PHU0001`, chọn chủ salon chính và bấm **Tạo trang mặc định**.
 6. Vào **MyHair → Cấu hình form** để điều chỉnh hai form.
-7. Vào **MyHair → Cài đặt** để nhập URL OA, kiểm tra đường dẫn đẹp và quản lý backup.
+7. Vào **MyHair → Cài đặt** để nhập URL OA, cấu hình Google Sheets, kiểm tra đường dẫn đẹp và quản lý backup.
 
 ## Cách hệ thống xác định khách của salon
 
