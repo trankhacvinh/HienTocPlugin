@@ -178,7 +178,7 @@ final class HTP_Google_Sheets_Service
                 $wpdb->update($table, [
                     'attempts' => $attempts,
                     'available_at' => get_date_from_gmt($available_gmt),
-                    'last_error' => mb_substr($exception->getMessage(), 0, 1000),
+                    'last_error' => substr($exception->getMessage(), 0, 1000),
                     'updated_at' => current_time('mysql'),
                 ], ['id' => (int) $row->id]);
                 $failed++;
@@ -203,7 +203,7 @@ final class HTP_Google_Sheets_Service
         $code = wp_remote_retrieve_response_code($response);
         $body = trim((string) wp_remote_retrieve_body($response));
         if ($code < 200 || $code >= 300) {
-            throw new RuntimeException('Google Sheets trả HTTP ' . $code . ($body !== '' ? ': ' . mb_substr($body, 0, 300) : ''));
+            throw new RuntimeException('Google Sheets trả HTTP ' . $code . ($body !== '' ? ': ' . substr($body, 0, 300) : ''));
         }
 
         $decoded = json_decode($body, true);
@@ -246,7 +246,7 @@ final class HTP_Google_Sheets_Service
 
         $response = wp_remote_post(self::endpoint_url(), [
             'timeout' => $timeout,
-            'redirection' => 3,
+            'redirection' => 5,
             'headers' => [
                 'Content-Type' => 'application/json; charset=utf-8',
                 'User-Agent' => 'MyHair-WordPress/' . (defined('HTP_VERSION') ? HTP_VERSION : 'unknown'),
