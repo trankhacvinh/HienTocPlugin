@@ -4,6 +4,16 @@ defined('WP_UNINSTALL_PLUGIN') || exit;
 
 global $wpdb;
 
+// Tạo một bản sao lưu an toàn trước khi xóa dữ liệu plugin.
+// File được giữ lại trong wp-content/htp-backups để có thể khôi phục sau khi cài lại plugin.
+$backup_service = __DIR__ . '/includes/class-htp-backup-service.php';
+if (is_file($backup_service)) {
+    require_once $backup_service;
+    if (class_exists('HTP_Backup_Service')) {
+        HTP_Backup_Service::create_server_backup('auto-before-uninstall');
+    }
+}
+
 $attachment_ids = get_posts([
     'post_type' => 'attachment',
     'post_status' => 'any',
