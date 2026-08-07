@@ -2,14 +2,14 @@
 Contributors: HienTocPlugin
 Requires at least: 6.4
 Requires PHP: 8.1
-Stable tag: 2.0.3
+Stable tag: 2.1.0
 License: GPLv2 or later
 
 Plugin quản lý landing salon, đăng ký hiến tóc và thành viên MyHair.
 
 == Description ==
 
-Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ landing được gắn với salon và lưu chủ salon tại thời điểm đăng ký. Landing chứa hai tab form hiến tóc/thành viên, form cấu hình được, hỗ trợ ảnh, phân trang và xuất Excel.
+Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ landing được gắn với salon và lưu chủ salon tại thời điểm đăng ký. Landing chứa hai tab form hiến tóc/thành viên, form cấu hình được, hỗ trợ ảnh, phân trang, xuất Excel và sao lưu/khôi phục toàn bộ dữ liệu.
 
 == Installation ==
 
@@ -18,8 +18,17 @@ Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ l
 3. Tạo tài khoản chủ salon.
 4. Tạo salon, gán chủ salon và tạo trang landing mặc định.
 5. Cấu hình form và URL OA.
+6. Trước khi xóa/cài lại plugin, vào MyHair > Cài đặt > Sao lưu & khôi phục để tải file .htpbackup.
 
 == Changelog ==
+
+= 2.1.0 =
+* Thêm xuất backup đầy đủ dạng .htpbackup.
+* Thêm nhập/khôi phục backup, thay thế toàn bộ dữ liệu MyHair hiện tại.
+* Backup gồm salon, form, khách hiến tóc, thành viên, trạng thái, cấu hình, phân quyền salon, landing page và ảnh liên quan.
+* Khi xóa plugin, hệ thống tự tạo một backup an toàn trên máy chủ trước khi xóa bảng dữ liệu.
+* Sau khi cài lại plugin có thể khôi phục trực tiếp từ backup tự động còn trên máy chủ.
+* Giữ cơ chế ánh xạ tài khoản theo ID/email/login khi khôi phục.
 
 = 2.0.3 =
 * Ngày sinh hiển thị và nhập theo chuẩn Việt Nam dd/mm/yyyy.
