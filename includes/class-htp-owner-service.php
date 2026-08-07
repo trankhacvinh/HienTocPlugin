@@ -9,7 +9,14 @@ final class HTP_Owner_Service
     public static function init(): void
     {
         self::maybe_upgrade();
-        add_action('shutdown', [self::class, 'backfill_missing_submission_owners']);
+
+        $is_public_submission = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['htp_form_submit']);
+        $admin_action = isset($_REQUEST['action']) ? sanitize_key(wp_unslash($_REQUEST['action'])) : '';
+        $is_owner_related_admin_action = in_array($admin_action, ['htp_save_salon', 'htp_save_user'], true);
+
+        if ($is_public_submission || $is_owner_related_admin_action) {
+            add_action('shutdown', [self::class, 'backfill_missing_submission_owners']);
+        }
     }
 
     public static function maybe_upgrade(): void
@@ -41,10 +48,10 @@ final class HTP_Owner_Service
             if (!self::index_exists($submissions_table, 'salon_owner_user_id')) {
                 $wpdb->query("ALTER TABLE `{$submissions_table}` ADD KEY `salon_owner_user_id` (`salon_owner_user_id`)"); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             }
-            self::backfill_missing_submission_owners();
         }
 
         update_option('htp_owner_schema_version', self::SCHEMA_VERSION);
+        self::backfill_missing_submission_owners();
     }
 
     public static function owner_users(): array
@@ -126,12 +133,12 @@ final class HTP_Owner_Service
     {
         global $wpdb;
 
-        $salons_table = $wpdb->prefix . 'htp_salons';
-        $submissions_table = $wpdb->prefix . 'htp_submissions';
-        if (!self::column_exists($salons_table, 'owner_user_id') || !self::column_exists($submissions_table, 'salon_owner_user_id')) {
+        if ((string) get_option('htp_owner_schema_version') !== self::SCHEMA_VERSION) {
             return;
         }
 
+        $salons_table = $wpdb->prefix . 'htp_salons';
+        $submissions_table = $wpdb->prefix . 'htp_submissions';
         $wpdb->query(
             "UPDATE `{$submissions_table}` x
              INNER JOIN `{$salons_table}` s ON s.id = x.salon_id
