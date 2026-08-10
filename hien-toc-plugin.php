@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hiến Tóc Plugin
  * Description: Quản lý landing salon, đăng ký hiến tóc và đăng ký thành viên.
- * Version: 2.2.2
+ * Version: 2.2.3
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: HienTocPlugin
@@ -11,7 +11,7 @@
 
 defined('ABSPATH') || exit;
 
-define('HTP_VERSION', '2.2.2');
+define('HTP_VERSION', '2.2.3');
 define('HTP_DB_VERSION', '2.0.2');
 define('HTP_FILE', __FILE__);
 define('HTP_PATH', plugin_dir_path(__FILE__));

@@ -203,11 +203,14 @@ final class HTP_Google_Sheets_Service
         $code = wp_remote_retrieve_response_code($response);
         $body = trim((string) wp_remote_retrieve_body($response));
         if ($code < 200 || $code >= 300) {
-            throw new RuntimeException('Google Sheets trả HTTP ' . $code . ($body !== '' ? ': ' . substr($body, 0, 300) : ''));
+            throw new RuntimeException(self::http_error_message('Google Sheets trả lỗi', $response));
         }
 
         $decoded = json_decode($body, true);
-        if (is_array($decoded) && isset($decoded['ok']) && !$decoded['ok']) {
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Google Sheets phản hồi không phải JSON hợp lệ: ' . self::response_excerpt($body));
+        }
+        if (isset($decoded['ok']) && !$decoded['ok']) {
             throw new RuntimeException((string) ($decoded['error'] ?? 'Google Apps Script từ chối dữ liệu.'));
         }
     }
@@ -227,15 +230,26 @@ final class HTP_Google_Sheets_Service
         $code = wp_remote_retrieve_response_code($response);
         $body = trim((string) wp_remote_retrieve_body($response));
         if ($code < 200 || $code >= 300) {
-            throw new RuntimeException('Kết nối thất bại, HTTP ' . $code . '.');
+            throw new RuntimeException(self::http_error_message('Kết nối thất bại', $response));
         }
         $decoded = json_decode($body, true);
         if (!is_array($decoded) || empty($decoded['ok'])) {
-            throw new RuntimeException('Endpoint có phản hồi nhưng không đúng định dạng MyHair.');
+            $detail = is_array($decoded) && !empty($decoded['error'])
+                ? (string) $decoded['error']
+                : self::response_excerpt($body);
+            throw new RuntimeException('Endpoint có phản hồi nhưng không đúng định dạng MyHair' . ($detail !== '' ? ': ' . $detail : '.'));
         }
         return $decoded;
     }
 
+    /**
+     * Send data to Apps Script using a regular form POST instead of raw JSON.
+     *
+     * Apps Script ContentService returns a 302 to a one-time
+     * script.googleusercontent.com URL. WordPress normally follows 302 redirects
+     * automatically, but handling the redirect explicitly makes the integration
+     * predictable across WordPress/PHP/hosting combinations.
+     */
     private static function post_payload(array $payload, int $timeout): array
     {
         $payload['secret'] = trim((string) get_option('htp_google_sheets_secret', ''));
@@ -244,20 +258,77 @@ final class HTP_Google_Sheets_Service
             'member' => (string) get_option('htp_google_sheets_member_tab', 'Thanh vien'),
         ];
 
+        $json = wp_json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json) || $json === '') {
+            throw new RuntimeException('Không thể mã hóa dữ liệu gửi Google Sheets.');
+        }
+
         $response = wp_remote_post(self::endpoint_url(), [
             'timeout' => $timeout,
-            'redirection' => 5,
+            'redirection' => 0,
+            'httpversion' => '1.1',
             'headers' => [
-                'Content-Type' => 'application/json; charset=utf-8',
+                'Accept' => 'application/json, text/plain, */*',
                 'User-Agent' => 'MyHair-WordPress/' . (defined('HTP_VERSION') ? HTP_VERSION : 'unknown'),
             ],
-            'body' => wp_json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'data_format' => 'body',
+            'body' => [
+                'payload' => $json,
+            ],
         ]);
         if (is_wp_error($response)) {
             throw new RuntimeException($response->get_error_message());
         }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $location = wp_remote_retrieve_header($response, 'location');
+        if (in_array($code, [301, 302, 303], true) && is_string($location) && $location !== '') {
+            $redirect_response = wp_remote_get($location, [
+                'timeout' => $timeout,
+                'redirection' => 5,
+                'httpversion' => '1.1',
+                'headers' => [
+                    'Accept' => 'application/json, text/plain, */*',
+                    'User-Agent' => 'MyHair-WordPress/' . (defined('HTP_VERSION') ? HTP_VERSION : 'unknown'),
+                ],
+            ]);
+            if (is_wp_error($redirect_response)) {
+                throw new RuntimeException('Apps Script đã xử lý request nhưng không đọc được phản hồi chuyển hướng: ' . $redirect_response->get_error_message());
+            }
+            return $redirect_response;
+        }
+
         return $response;
+    }
+
+    private static function http_error_message(string $prefix, array $response): string
+    {
+        $code = (int) wp_remote_retrieve_response_code($response);
+        $body = trim((string) wp_remote_retrieve_body($response));
+        $content_type = trim((string) wp_remote_retrieve_header($response, 'content-type'));
+        $location = trim((string) wp_remote_retrieve_header($response, 'location'));
+
+        $parts = [$prefix . ', HTTP ' . $code];
+        $excerpt = self::response_excerpt($body);
+        if ($excerpt !== '') {
+            $parts[] = $excerpt;
+        }
+        if ($content_type !== '') {
+            $parts[] = 'Content-Type: ' . $content_type;
+        }
+        if ($location !== '') {
+            $parts[] = 'Redirect: ' . $location;
+        }
+        return implode(' | ', $parts);
+    }
+
+    private static function response_excerpt(string $body): string
+    {
+        if ($body === '') {
+            return '';
+        }
+        $text = html_entity_decode(wp_strip_all_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/\s+/u', ' ', $text) ?: '';
+        return mb_substr(trim($text), 0, 400);
     }
 
     private static function build_payload(int $submission_id, string $event): array
