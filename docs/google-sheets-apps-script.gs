@@ -1,14 +1,31 @@
 const MYHAIR_SECRET = 'CHANGE_THIS_TO_THE_SAME_SECRET_IN_WORDPRESS';
 
+// Optional: set a Spreadsheet ID when this script is standalone.
+// Leave blank if the Apps Script project was created from Extensions > Apps Script
+// inside the target Google Sheet.
+const MYHAIR_SPREADSHEET_ID = '';
+
+function doGet() {
+  return jsonResponse({
+    ok: true,
+    service: 'MyHair Google Sheets endpoint',
+    message: 'Web App is reachable. Use WordPress to test authenticated POST requests.'
+  });
+}
+
 function doPost(e) {
   try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const body = parseRequestBody(e);
     if (!body.secret || body.secret !== MYHAIR_SECRET) {
       return jsonResponse({ ok: false, error: 'Invalid secret' });
     }
 
     if (body.action === 'ping') {
-      return jsonResponse({ ok: true, message: 'MyHair Google Sheets endpoint is ready' });
+      return jsonResponse({
+        ok: true,
+        message: 'MyHair Google Sheets endpoint is ready',
+        spreadsheet: getSpreadsheet().getName()
+      });
     }
 
     if (body.action !== 'upsert_submission' || !body.submission) {
@@ -30,8 +47,35 @@ function doPost(e) {
   }
 }
 
+function parseRequestBody(e) {
+  // Preferred transport from MyHair WordPress plugin: regular form POST with
+  // one JSON field named "payload". This is more compatible across PHP hosts.
+  if (e && e.parameter && e.parameter.payload) {
+    return JSON.parse(String(e.parameter.payload));
+  }
+
+  // Backward compatibility with older plugin versions that POST raw JSON.
+  const raw = (e && e.postData && e.postData.contents) || '{}';
+  return JSON.parse(raw);
+}
+
+function getSpreadsheet() {
+  if (MYHAIR_SPREADSHEET_ID) {
+    return SpreadsheetApp.openById(MYHAIR_SPREADSHEET_ID);
+  }
+
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (!active) {
+    throw new Error(
+      'Apps Script is not bound to a Google Sheet. Open the target Sheet > Extensions > Apps Script, ' +
+      'or set MYHAIR_SPREADSHEET_ID in Code.gs.'
+    );
+  }
+  return active;
+}
+
 function getOrCreateSheet(name) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(name);
   if (!sheet) sheet = ss.insertSheet(name);
   return sheet;
