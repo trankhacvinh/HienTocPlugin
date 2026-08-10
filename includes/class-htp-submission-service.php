@@ -30,6 +30,11 @@ final class HTP_Submission_Service
         return array_keys(self::status_labels($form_key));
     }
 
+    public static function core_required_fields(): array
+    {
+        return ['full_name', 'phone', 'consent'];
+    }
+
     public function submit(object $salon, string $form_key, array $input): array
     {
         global $wpdb;
@@ -149,28 +154,34 @@ final class HTP_Submission_Service
             $this->mark_visit_converted((int) $salon->id, $form_key, $submission_id);
             $wpdb->query('COMMIT');
             delete_transient($rate_key);
+        } catch (Throwable $exception) {
+            $wpdb->query('ROLLBACK');
+            throw $exception;
+        }
 
+        // Logging and Google Sheets queueing are secondary operations. They must
+        // never make a successfully saved customer submission appear to fail.
+        try {
             HTP_Activity_Logger::log('submission_created', 'submission', $submission_id, [
                 'salon_id' => (int) $salon->id,
                 'form_key' => $form_key,
                 'submission_code' => $submission_code,
             ], 0);
-
-            return [
-                'id' => $submission_id,
-                'public_id' => $public_id,
-                'submission_code' => $submission_code,
-                'full_name' => (string) $normalized['full_name'],
-                'status' => $status,
-                'existing' => false,
-                'form_key' => $form_key,
-                'success_message' => (string) $form->success_message,
-                'oa_url' => $form_key === 'member' ? $this->oa_url($salon) : '',
-            ];
-        } catch (Throwable $exception) {
-            $wpdb->query('ROLLBACK');
-            throw $exception;
+        } catch (Throwable $secondary_exception) {
+            error_log('[MyHair] Submission #' . $submission_id . ' saved, but post-save hook failed: ' . $secondary_exception->getMessage());
         }
+
+        return [
+            'id' => $submission_id,
+            'public_id' => $public_id,
+            'submission_code' => $submission_code,
+            'full_name' => (string) $normalized['full_name'],
+            'status' => $status,
+            'existing' => false,
+            'form_key' => $form_key,
+            'success_message' => (string) $form->success_message,
+            'oa_url' => $form_key === 'member' ? $this->oa_url($salon) : '',
+        ];
     }
 
     public function update_status(int $submission_id, string $new_status, string $note = ''): void
@@ -286,20 +297,22 @@ final class HTP_Submission_Service
     private function validate_and_normalize(array $fields, array $input): array
     {
         $result = [];
+        $required_keys = self::core_required_fields();
+
         foreach ($fields as $field) {
             $key = (string) $field->field_key;
             $type = (string) $field->field_type;
+
+            // Images and every non-core field are optional. If provided, they are
+            // still validated/uploaded normally; if omitted, the registration is saved.
             if (in_array($type, ['image', 'images'], true)) {
-                if ((int) $field->required === 1 && !$this->has_uploaded_file($key)) {
-                    throw new InvalidArgumentException('Vui lòng cung cấp: ' . (string) $field->label . '.');
-                }
                 continue;
             }
 
             $raw = $input[$key] ?? null;
             $value = $this->sanitize_field_value($type, $raw, HTP_Form_Repository::decode_options($field->options_json));
             $is_empty = $value === '' || $value === null || $value === [] || $value === false;
-            if ((int) $field->required === 1 && $is_empty) {
+            if (in_array($key, $required_keys, true) && $is_empty) {
                 throw new InvalidArgumentException('Vui lòng nhập: ' . (string) $field->label . '.');
             }
             $result[$key] = $value;
