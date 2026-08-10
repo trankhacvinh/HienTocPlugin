@@ -1,6 +1,45 @@
 (function () {
   'use strict';
 
+  var CORE_REQUIRED_FIELDS = ['full_name', 'phone', 'consent'];
+
+  function fieldKeyFromName(name) {
+    return String(name || '').replace(/\[\]$/, '');
+  }
+
+  function normalizeRequiredFields(form) {
+    form.querySelectorAll('input, select, textarea').forEach(function (control) {
+      var key = fieldKeyFromName(control.getAttribute('name'));
+      if (!key) return;
+
+      if (CORE_REQUIRED_FIELDS.indexOf(key) !== -1) {
+        control.required = true;
+      } else {
+        control.required = false;
+      }
+    });
+
+    form.querySelectorAll('.htp-field, .htp-consent, .htp-choice-group').forEach(function (wrapper) {
+      var control = wrapper.querySelector('input[name], select[name], textarea[name]');
+      if (!control) return;
+      var key = fieldKeyFromName(control.getAttribute('name'));
+      if (CORE_REQUIRED_FIELDS.indexOf(key) === -1) {
+        wrapper.querySelectorAll('b').forEach(function (mark) {
+          mark.remove();
+        });
+      }
+    });
+  }
+
+  function ensureSubmitMarker(form) {
+    if (form.querySelector('input[type="hidden"][name="htp_form_submit"]')) return;
+    var marker = document.createElement('input');
+    marker.type = 'hidden';
+    marker.name = 'htp_form_submit';
+    marker.value = '1';
+    form.appendChild(marker);
+  }
+
   function validDateParts(day, month, year) {
     var date = new Date(year, month - 1, day);
     return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
@@ -134,6 +173,11 @@
     });
   });
 
+  document.querySelectorAll('[data-htp-public-form]').forEach(function (form) {
+    normalizeRequiredFields(form);
+    ensureSubmitMarker(form);
+  });
+
   document.querySelectorAll('[data-htp-public-form] input[type="date"]').forEach(initVietnameseDateField);
 
   document.querySelectorAll('[data-htp-public-form]').forEach(function (form) {
@@ -167,12 +211,20 @@
         return;
       }
 
+      ensureSubmitMarker(form);
+
       var button = form.querySelector('.htp-submit');
       if (!button || button.disabled) return;
-      button.disabled = true;
-      button.classList.add('is-loading');
-      var span = button.querySelector('span');
-      if (span) span.textContent = (window.HTPPublic && HTPPublic.submitting) || 'Đang gửi...';
+
+      // Do not disable the submit button inside the submit event itself.
+      // A disabled submit button is excluded from the browser POST payload,
+      // which previously caused WordPress to reload the form without saving it.
+      window.setTimeout(function () {
+        button.disabled = true;
+        button.classList.add('is-loading');
+        var span = button.querySelector('span');
+        if (span) span.textContent = (window.HTPPublic && HTPPublic.submitting) || 'Đang gửi...';
+      }, 0);
     });
   });
 
