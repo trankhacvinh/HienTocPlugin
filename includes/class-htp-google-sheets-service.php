@@ -8,6 +8,7 @@ final class HTP_Google_Sheets_Service
     private const CRON_SCHEDULE = 'htp_every_five_minutes';
     private const MAX_ATTEMPTS = 12;
     private const SCHEMA_VERSION = '1.0.0';
+    private const SALON_DESTINATIONS_OPTION = 'htp_salon_google_sheets';
 
     public static function init(): void
     {
@@ -76,6 +77,77 @@ final class HTP_Google_Sheets_Service
         }
     }
 
+    public static function salon_destination(int $salon_id): array
+    {
+        $all = get_option(self::SALON_DESTINATIONS_OPTION, []);
+        if (!is_array($all)) {
+            $all = [];
+        }
+        $row = isset($all[$salon_id]) && is_array($all[$salon_id]) ? $all[$salon_id] : [];
+        $id = sanitize_text_field((string) ($row['spreadsheet_id'] ?? ''));
+        $url = esc_url_raw((string) ($row['url'] ?? ''));
+
+        return [
+            'enabled' => !empty($row['enabled']) && $id !== '',
+            'spreadsheet_id' => $id,
+            'url' => $url !== '' ? $url : ($id !== '' ? self::spreadsheet_url($id) : ''),
+        ];
+    }
+
+    public static function save_salon_destination(int $salon_id, array $input): void
+    {
+        if ($salon_id <= 0) {
+            throw new InvalidArgumentException('Salon không hợp lệ.');
+        }
+
+        $enabled = !empty($input['google_sheet_enabled']);
+        $raw = trim((string) ($input['google_sheet_url'] ?? ''));
+        $spreadsheet_id = $raw !== '' ? self::extract_spreadsheet_id($raw) : '';
+
+        if ($raw !== '' && $spreadsheet_id === '') {
+            throw new InvalidArgumentException('Google Sheet URL/ID không hợp lệ. Hãy dán URL dạng docs.google.com/spreadsheets/d/.../edit hoặc Spreadsheet ID.');
+        }
+        if ($enabled && $spreadsheet_id === '') {
+            throw new InvalidArgumentException('Đã bật Google Sheet riêng nhưng chưa nhập Google Sheet URL/ID.');
+        }
+
+        $all = get_option(self::SALON_DESTINATIONS_OPTION, []);
+        if (!is_array($all)) {
+            $all = [];
+        }
+        $all[$salon_id] = [
+            'enabled' => $enabled ? 1 : 0,
+            'spreadsheet_id' => $spreadsheet_id,
+            'url' => $spreadsheet_id !== '' ? self::spreadsheet_url($spreadsheet_id) : '',
+        ];
+        update_option(self::SALON_DESTINATIONS_OPTION, $all, false);
+    }
+
+    public static function test_salon_connection(int $salon_id): array
+    {
+        if (self::endpoint_url() === '') {
+            throw new RuntimeException('Chưa cấu hình Apps Script Web App URL trong MyHair → Cài đặt.');
+        }
+        $salon = (new HTP_Salon_Repository())->find_by_id($salon_id);
+        if (!$salon) {
+            throw new RuntimeException('Không tìm thấy salon.');
+        }
+        $destination = self::salon_destination($salon_id);
+        if (empty($destination['spreadsheet_id'])) {
+            throw new RuntimeException('Salon chưa có Google Sheet riêng.');
+        }
+
+        $response = self::post_payload([
+            'action' => 'ping_salon',
+            'salon_spreadsheet_id' => $destination['spreadsheet_id'],
+            'salon_code' => (string) $salon->code,
+            'salon_name' => (string) $salon->name,
+            'site_url' => home_url('/'),
+            'sent_at' => gmdate('c'),
+        ], 15);
+        return self::decode_success_response($response, 'Kết nối Google Sheet riêng thất bại');
+    }
+
     public static function queue_submission(int $submission_id, string $event = 'updated'): void
     {
         if (!self::enabled() || $submission_id <= 0) {
@@ -120,6 +192,27 @@ final class HTP_Google_Sheets_Service
         $ids = $wpdb->get_col("SELECT id FROM {$wpdb->prefix}htp_submissions ORDER BY id ASC") ?: [];
         foreach ($ids as $id) {
             self::queue_submission((int) $id, 'resync');
+        }
+        return count($ids);
+    }
+
+    public static function queue_salon(int $salon_id): int
+    {
+        if (!self::enabled()) {
+            throw new RuntimeException('Đồng bộ Google Sheets chung đang tắt hoặc chưa có Apps Script Web App URL.');
+        }
+        $destination = self::salon_destination($salon_id);
+        if (empty($destination['enabled']) || empty($destination['spreadsheet_id'])) {
+            throw new RuntimeException('Google Sheet riêng của salon chưa được bật hoặc chưa cấu hình.');
+        }
+
+        global $wpdb;
+        $ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}htp_submissions WHERE salon_id = %d ORDER BY id ASC",
+            $salon_id
+        )) ?: [];
+        foreach ($ids as $id) {
+            self::queue_submission((int) $id, 'salon_resync');
         }
         return count($ids);
     }
@@ -198,21 +291,8 @@ final class HTP_Google_Sheets_Service
 
     public static function send_submission(int $submission_id, string $event = 'updated'): void
     {
-        $payload = self::build_payload($submission_id, $event);
-        $response = self::post_payload($payload, 12);
-        $code = wp_remote_retrieve_response_code($response);
-        $body = trim((string) wp_remote_retrieve_body($response));
-        if ($code < 200 || $code >= 300) {
-            throw new RuntimeException(self::http_error_message('Google Sheets trả lỗi', $response));
-        }
-
-        $decoded = json_decode($body, true);
-        if (!is_array($decoded)) {
-            throw new RuntimeException('Google Sheets phản hồi không phải JSON hợp lệ: ' . self::response_excerpt($body));
-        }
-        if (isset($decoded['ok']) && !$decoded['ok']) {
-            throw new RuntimeException((string) ($decoded['error'] ?? 'Google Apps Script từ chối dữ liệu.'));
-        }
+        $response = self::post_payload(self::build_payload($submission_id, $event), 12);
+        self::decode_success_response($response, 'Google Sheets trả lỗi');
     }
 
     public static function test_connection(): array
@@ -227,29 +307,26 @@ final class HTP_Google_Sheets_Service
             'site_url' => home_url('/'),
             'sent_at' => gmdate('c'),
         ], 15);
+        return self::decode_success_response($response, 'Kết nối thất bại');
+    }
+
+    private static function decode_success_response(array $response, string $http_prefix): array
+    {
         $code = wp_remote_retrieve_response_code($response);
         $body = trim((string) wp_remote_retrieve_body($response));
         if ($code < 200 || $code >= 300) {
-            throw new RuntimeException(self::http_error_message('Kết nối thất bại', $response));
+            throw new RuntimeException(self::http_error_message($http_prefix, $response));
         }
         $decoded = json_decode($body, true);
-        if (!is_array($decoded) || empty($decoded['ok'])) {
-            $detail = is_array($decoded) && !empty($decoded['error'])
-                ? (string) $decoded['error']
-                : self::response_excerpt($body);
-            throw new RuntimeException('Endpoint có phản hồi nhưng không đúng định dạng MyHair' . ($detail !== '' ? ': ' . $detail : '.'));
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Google Sheets phản hồi không phải JSON hợp lệ: ' . self::response_excerpt($body));
+        }
+        if (empty($decoded['ok'])) {
+            throw new RuntimeException((string) ($decoded['error'] ?? 'Google Apps Script từ chối dữ liệu.'));
         }
         return $decoded;
     }
 
-    /**
-     * Send data to Apps Script using a regular form POST instead of raw JSON.
-     *
-     * Apps Script ContentService returns a 302 to a one-time
-     * script.googleusercontent.com URL. WordPress normally follows 302 redirects
-     * automatically, but handling the redirect explicitly makes the integration
-     * predictable across WordPress/PHP/hosting combinations.
-     */
     private static function post_payload(array $payload, int $timeout): array
     {
         $payload['secret'] = trim((string) get_option('htp_google_sheets_secret', ''));
@@ -271,9 +348,7 @@ final class HTP_Google_Sheets_Service
                 'Accept' => 'application/json, text/plain, */*',
                 'User-Agent' => 'MyHair-WordPress/' . (defined('HTP_VERSION') ? HTP_VERSION : 'unknown'),
             ],
-            'body' => [
-                'payload' => $json,
-            ],
+            'body' => ['payload' => $json],
         ]);
         if (is_wp_error($response)) {
             throw new RuntimeException($response->get_error_message());
@@ -296,39 +371,7 @@ final class HTP_Google_Sheets_Service
             }
             return $redirect_response;
         }
-
         return $response;
-    }
-
-    private static function http_error_message(string $prefix, array $response): string
-    {
-        $code = (int) wp_remote_retrieve_response_code($response);
-        $body = trim((string) wp_remote_retrieve_body($response));
-        $content_type = trim((string) wp_remote_retrieve_header($response, 'content-type'));
-        $location = trim((string) wp_remote_retrieve_header($response, 'location'));
-
-        $parts = [$prefix . ', HTTP ' . $code];
-        $excerpt = self::response_excerpt($body);
-        if ($excerpt !== '') {
-            $parts[] = $excerpt;
-        }
-        if ($content_type !== '') {
-            $parts[] = 'Content-Type: ' . $content_type;
-        }
-        if ($location !== '') {
-            $parts[] = 'Redirect: ' . $location;
-        }
-        return implode(' | ', $parts);
-    }
-
-    private static function response_excerpt(string $body): string
-    {
-        if ($body === '') {
-            return '';
-        }
-        $text = html_entity_decode(wp_strip_all_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = preg_replace('/\s+/u', ' ', $text) ?: '';
-        return mb_substr(trim($text), 0, 400);
     }
 
     private static function build_payload(int $submission_id, string $event): array
@@ -358,11 +401,17 @@ final class HTP_Google_Sheets_Service
             $flat[$key] = is_array($value) ? implode(', ', array_map('strval', $value)) : (string) $value;
         }
 
+        $destination = self::salon_destination((int) $submission->salon_id);
+
         return [
             'action' => 'upsert_submission',
             'event' => sanitize_key($event),
             'site_url' => home_url('/'),
             'sent_at' => gmdate('c'),
+            'salon_destination' => [
+                'enabled' => !empty($destination['enabled']),
+                'spreadsheet_id' => (string) $destination['spreadsheet_id'],
+            ],
             'submission' => [
                 'id' => (int) $submission->id,
                 'public_id' => (string) $submission->public_id,
@@ -386,6 +435,56 @@ final class HTP_Google_Sheets_Service
                 'fields' => $flat,
             ],
         ];
+    }
+
+    private static function extract_spreadsheet_id(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        if (preg_match('~/spreadsheets/d/([a-zA-Z0-9_-]+)~', $value, $matches)) {
+            return sanitize_text_field($matches[1]);
+        }
+        if (preg_match('/^[a-zA-Z0-9_-]{20,}$/', $value)) {
+            return sanitize_text_field($value);
+        }
+        return '';
+    }
+
+    private static function spreadsheet_url(string $spreadsheet_id): string
+    {
+        return 'https://docs.google.com/spreadsheets/d/' . rawurlencode($spreadsheet_id) . '/edit';
+    }
+
+    private static function http_error_message(string $prefix, array $response): string
+    {
+        $code = (int) wp_remote_retrieve_response_code($response);
+        $body = trim((string) wp_remote_retrieve_body($response));
+        $content_type = trim((string) wp_remote_retrieve_header($response, 'content-type'));
+        $location = trim((string) wp_remote_retrieve_header($response, 'location'));
+        $parts = [$prefix . ', HTTP ' . $code];
+        $excerpt = self::response_excerpt($body);
+        if ($excerpt !== '') {
+            $parts[] = $excerpt;
+        }
+        if ($content_type !== '') {
+            $parts[] = 'Content-Type: ' . $content_type;
+        }
+        if ($location !== '') {
+            $parts[] = 'Redirect: ' . $location;
+        }
+        return implode(' | ', $parts);
+    }
+
+    private static function response_excerpt(string $body): string
+    {
+        if ($body === '') {
+            return '';
+        }
+        $text = html_entity_decode(wp_strip_all_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/\s+/u', ' ', $text) ?: '';
+        return mb_substr(trim($text), 0, 400);
     }
 
     private static function maybe_create_queue_table(): void
