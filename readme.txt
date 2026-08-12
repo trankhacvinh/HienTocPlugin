@@ -2,14 +2,14 @@
 Contributors: HienTocPlugin
 Requires at least: 6.4
 Requires PHP: 8.1
-Stable tag: 2.2.0
+Stable tag: 2.3.0
 License: GPLv2 or later
 
 Plugin quản lý landing salon, đăng ký hiến tóc và thành viên MyHair.
 
 == Description ==
 
-Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ landing được gắn với salon và lưu chủ salon tại thời điểm đăng ký. Landing chứa hai tab form hiến tóc/thành viên, form cấu hình được, hỗ trợ ảnh, phân trang, xuất Excel, sao lưu/khôi phục và đồng bộ Google Sheets.
+Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ landing được gắn với salon và lưu chủ salon tại thời điểm đăng ký. Landing chứa hai tab form hiến tóc/thành viên, form cấu hình được, hỗ trợ ảnh, phân trang, xuất Excel, sao lưu/khôi phục và đồng bộ Google Sheets tổng + Google Sheet riêng theo từng salon.
 
 == Installation ==
 
@@ -19,9 +19,19 @@ Mỗi salon có mã, landing, QR và chủ salon chính. Mọi form gửi từ l
 4. Tạo salon, gán chủ salon và tạo trang landing mặc định.
 5. Cấu hình form và URL OA.
 6. Nếu cần Google Sheets, vào MyHair > Cài đặt > Đồng bộ Google Sheets và làm theo hướng dẫn Apps Script.
-7. Trước khi xóa/cài lại plugin, vào MyHair > Cài đặt > Sao lưu & khôi phục để tải file .htpbackup.
+7. Muốn một salon có Sheet riêng: Share file Google Sheet của salon cho tài khoản Google đang chạy Apps Script với quyền Editor, sau đó vào MyHair > Salon > Sửa salon, bật Google Sheet riêng và dán URL.
+8. Có thể bấm Kiểm tra kết nối Sheet và Đồng bộ lại dữ liệu salon để đẩy dữ liệu cũ sang Sheet riêng.
+9. Trước khi xóa/cài lại plugin, vào MyHair > Cài đặt > Sao lưu & khôi phục để tải file .htpbackup.
 
 == Changelog ==
+
+= 2.3.0 =
+* Hỗ trợ một Google Sheet riêng cho từng salon bên cạnh Sheet tổng MyHair.
+* Chỉ cần một Apps Script và một Secret chung; không phải deploy Apps Script riêng cho từng salon.
+* Cấu hình Sheet riêng ngay trong màn hình Sửa salon bằng URL hoặc Spreadsheet ID.
+* Có nút kiểm tra quyền truy cập Sheet riêng, mở Sheet và đồng bộ lại toàn bộ dữ liệu cũ của salon.
+* Mỗi đăng ký được upsert vào Sheet tổng và, nếu bật, thêm vào Sheet riêng đúng salon.
+* Nếu Sheet riêng lỗi quyền/truy cập, hàng đợi giữ bản ghi và tự thử lại; Sheet tổng không bị tạo trùng nhờ submission_code.
 
 = 2.2.0 =
 * Thêm cấu hình đồng bộ Google Sheets bằng Google Apps Script Web App.

@@ -1,8 +1,7 @@
 const MYHAIR_SECRET = 'CHANGE_THIS_TO_THE_SAME_SECRET_IN_WORDPRESS';
 
-// Optional: set a Spreadsheet ID when this script is standalone.
-// Leave blank if the Apps Script project was created from Extensions > Apps Script
-// inside the target Google Sheet.
+// Sheet tổng MyHair. Nếu Apps Script được tạo từ Extensions > Apps Script
+// ngay trong Sheet tổng, có thể để trống. Nếu là project standalone, điền ID Sheet tổng.
 const MYHAIR_SPREADSHEET_ID = '';
 
 function doGet() {
@@ -21,10 +20,27 @@ function doPost(e) {
     }
 
     if (body.action === 'ping') {
+      const ss = getPrimarySpreadsheet();
       return jsonResponse({
         ok: true,
         message: 'MyHair Google Sheets endpoint is ready',
-        spreadsheet: getSpreadsheet().getName()
+        spreadsheet: ss.getName(),
+        spreadsheet_id: ss.getId()
+      });
+    }
+
+    if (body.action === 'ping_salon') {
+      const salonId = String(body.salon_spreadsheet_id || '').trim();
+      if (!salonId) {
+        return jsonResponse({ ok: false, error: 'Missing salon_spreadsheet_id' });
+      }
+      const salonSheet = SpreadsheetApp.openById(salonId);
+      return jsonResponse({
+        ok: true,
+        message: 'Salon Google Sheet is ready',
+        salon_code: body.salon_code || '',
+        spreadsheet: salonSheet.getName(),
+        spreadsheet_id: salonSheet.getId()
       });
     }
 
@@ -37,29 +53,50 @@ function doPost(e) {
       ? ((body.sheet_tabs && body.sheet_tabs.member) || 'Thanh vien')
       : ((body.sheet_tabs && body.sheet_tabs.donation) || 'Hien toc');
 
-    const sheet = getOrCreateSheet(tabName);
     const rowObject = flattenSubmission(body);
-    upsertBySubmissionCode(sheet, rowObject);
+    const destinations = [];
 
-    return jsonResponse({ ok: true, sheet: tabName, submission_code: s.submission_code });
+    // Luôn ghi vào Sheet tổng.
+    const primary = getPrimarySpreadsheet();
+    upsertBySubmissionCode(getOrCreateSheet(primary, tabName), rowObject);
+    destinations.push({ type: 'global', spreadsheet_id: primary.getId(), spreadsheet: primary.getName(), sheet: tabName });
+
+    // Nếu salon được cấu hình Sheet riêng, ghi thêm cùng bản ghi sang Sheet đó.
+    const salonDestination = body.salon_destination || {};
+    const salonSpreadsheetId = String(salonDestination.spreadsheet_id || '').trim();
+    if (salonDestination.enabled && salonSpreadsheetId && salonSpreadsheetId !== primary.getId()) {
+      const salonSpreadsheet = SpreadsheetApp.openById(salonSpreadsheetId);
+      upsertBySubmissionCode(getOrCreateSheet(salonSpreadsheet, tabName), rowObject);
+      destinations.push({
+        type: 'salon',
+        spreadsheet_id: salonSpreadsheet.getId(),
+        spreadsheet: salonSpreadsheet.getName(),
+        sheet: tabName,
+        salon_code: s.salon_code || ''
+      });
+    }
+
+    return jsonResponse({
+      ok: true,
+      submission_code: s.submission_code,
+      destinations: destinations
+    });
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err && err.message ? err.message : err) });
   }
 }
 
 function parseRequestBody(e) {
-  // Preferred transport from MyHair WordPress plugin: regular form POST with
-  // one JSON field named "payload". This is more compatible across PHP hosts.
   if (e && e.parameter && e.parameter.payload) {
     return JSON.parse(String(e.parameter.payload));
   }
 
-  // Backward compatibility with older plugin versions that POST raw JSON.
+  // Tương thích ngược với plugin cũ gửi raw JSON.
   const raw = (e && e.postData && e.postData.contents) || '{}';
   return JSON.parse(raw);
 }
 
-function getSpreadsheet() {
+function getPrimarySpreadsheet() {
   if (MYHAIR_SPREADSHEET_ID) {
     return SpreadsheetApp.openById(MYHAIR_SPREADSHEET_ID);
   }
@@ -67,17 +104,16 @@ function getSpreadsheet() {
   const active = SpreadsheetApp.getActiveSpreadsheet();
   if (!active) {
     throw new Error(
-      'Apps Script is not bound to a Google Sheet. Open the target Sheet > Extensions > Apps Script, ' +
+      'Apps Script is not bound to the global Google Sheet. Open the global Sheet > Extensions > Apps Script, ' +
       'or set MYHAIR_SPREADSHEET_ID in Code.gs.'
     );
   }
   return active;
 }
 
-function getOrCreateSheet(name) {
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(name);
-  if (!sheet) sheet = ss.insertSheet(name);
+function getOrCreateSheet(spreadsheet, name) {
+  let sheet = spreadsheet.getSheetByName(name);
+  if (!sheet) sheet = spreadsheet.insertSheet(name);
   return sheet;
 }
 

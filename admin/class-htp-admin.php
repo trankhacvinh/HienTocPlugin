@@ -109,6 +109,8 @@ final class HTP_Admin
             'google_test_ok' => ['success', 'Kết nối Google Sheets thành công.'],
             'google_queued' => ['success', 'Đã đưa toàn bộ dữ liệu hiện có vào hàng đợi Google Sheets và bắt đầu đồng bộ.'],
             'google_processed' => ['success', 'Đã chạy xử lý hàng đợi Google Sheets ngay bây giờ.'],
+            'google_salon_test_ok' => ['success', 'Kết nối Google Sheet riêng của salon thành công.'],
+            'google_salon_queued' => ['success', 'Đã đưa toàn bộ dữ liệu của salon vào hàng đợi đồng bộ và bắt đầu xử lý.'],
             'error' => ['error', 'Không thể thực hiện thao tác. Vui lòng thử lại.'],
         ];
         if (isset($messages[$message])) {

@@ -87,6 +87,7 @@ $options = [
     'htp_google_sheets_member_tab',
     'htp_google_sheets_last_sync_at',
     'htp_google_sheets_last_sync_summary',
+    'htp_salon_google_sheets',
 ];
 foreach ($options as $option) {
     delete_option($option);
